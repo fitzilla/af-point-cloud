@@ -1057,7 +1057,12 @@ body {
   const RAIN_VERT = `
     attribute vec2 aRef; attribute vec4 aRand; attribute float aEnd;
     uniform sampler2D tRPos; uniform sampler2D tRVel;
-    uniform float uPR, uCamDist, uAlpha, uSize, uGrain, uTear, uTearT;
+    uniform float uPR, uCamDist, uAlpha, uSize, uGrain, uTear, uTearT, uHue;
+    vec3 hueShift(vec3 c, float a) {
+      const vec3 k = vec3(0.57735);
+      float ca = cos(a);
+      return c * ca + cross(k, c) * sin(a) + k * dot(k, c) * (1.0 - ca);
+    }
     uniform vec3 uCamLocal;
     uniform vec3 uPrimary, uHighlight, uSoft, uDeep;
     varying vec3 vColor; varying float vAlpha; varying float vShape; varying float vSeed;
@@ -1082,6 +1087,7 @@ body {
       if (cp > 0.62) c = uSoft;
       if (cp > 0.8) c = uDeep;
       if (cp > 0.96) c = vec3(1.0);
+      c = max(hueShift(c, uHue), 0.0);   // clicks rotate the rain's colour
       c = mix(c, vec3(1.0), clamp(V.w, 0.0, 1.0) * 0.6);
 
       // drops behind the (invisible) letters are hidden; drops in front pass over faintly
@@ -1096,6 +1102,23 @@ body {
       vAlpha = uAlpha * clamp(P.w, 0.0, 1.0) * (0.32 + aRand.x * 0.4) * mix(1.0, 0.04, occ) * mix(1.0, 0.3, front) * (1.0 - aEnd * 0.85);
       vShape = aRand.w;
       vSeed = aRand.x;
+    }
+  `;
+  // drop shapes; a click in digital rain switches between them
+  const RAIN_FRAG = `
+    uniform float uShape;
+    varying vec3 vColor; varying float vAlpha; varying float vShape; varying float vSeed;
+    ${HASH}
+    void main(){
+      vec2 c = gl_PointCoord - 0.5;
+      float a;
+      if (uShape < 0.5) a = smoothstep(0.5, 0.2, length(c));                                         // soft dots
+      else if (uShape < 1.5) a = 1.0;                                                                 // square pixels
+      else if (uShape < 2.5) a = step(min(abs(c.x), abs(c.y)), 0.11);                                 // plus signs
+      else if (uShape < 3.5) a = step(0.45, hash21(floor(gl_PointCoord * 3.0) + vSeed * 97.0));       // broken pixels
+      else a = smoothstep(0.09, 0.0, abs(length(c) - 0.36));                                          // rings
+      if (a < 0.01) discard;
+      gl_FragColor = vec4(vColor * vAlpha * a, 1.0);
     }
   `;
   const LINE_FRAG = `
@@ -1166,11 +1189,11 @@ body {
 
   const rainUniforms = {
     tRPos: { value: null }, tRVel: { value: null }, tSdf: { value: sdfTex }, uPartZ: { value: partZ }, uPartD: { value: partD },
-    uPR: { value: PR }, uCamDist: { value: 6 }, uAlpha: { value: 0 }, uSize: { value: coarse ? 1.3 : 1.2 }, uGrain: { value: 1 }, uTear: { value: 0 }, uTearT: { value: 0 }, uSlab: { value: SLAB }, uMargin: { value: MARGIN }, uWarp: warpU, uWarpT: warpT, uWarpL: warpL, uWarpC: warpC, uCamLocal: { value: V3() },
+    uPR: { value: PR }, uCamDist: { value: 6 }, uAlpha: { value: 0 }, uSize: { value: coarse ? 1.3 : 1.2 }, uGrain: { value: 1 }, uTear: { value: 0 }, uTearT: { value: 0 }, uHue: { value: 0 }, uShape: { value: 0 }, uSlab: { value: SLAB }, uMargin: { value: MARGIN }, uWarp: warpU, uWarpT: warpT, uWarpL: warpL, uWarpC: warpC, uCamLocal: { value: V3() },
     uPrimary: { value: PAL.primary }, uHighlight: { value: PAL.highlight }, uSoft: { value: PAL.soft }, uDeep: { value: PAL.deep },
   };
   const rainMatOpts = { uniforms: rainUniforms, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending };
-  const rainPoints = new THREE.Points(rainGeo, new THREE.ShaderMaterial({ vertexShader: RAIN_VERT, fragmentShader: PT_FRAG, ...rainMatOpts }));
+  const rainPoints = new THREE.Points(rainGeo, new THREE.ShaderMaterial({ vertexShader: RAIN_VERT, fragmentShader: RAIN_FRAG, ...rainMatOpts }));
   const rainLines = new THREE.LineSegments(lineGeo, new THREE.ShaderMaterial({ vertexShader: RAIN_VERT, fragmentShader: LINE_FRAG, ...rainMatOpts }));
   [rainPoints, rainLines].forEach((o) => { o.frustumCulled = false; o.visible = false; sculpture.add(o); });
 
@@ -1252,8 +1275,9 @@ body {
     const pick = (a) => a[(R() * a.length) | 0];
     const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
-    const bpm = 68 + Math.round(R() * 18);
-    const swing = 0.54 + R() * 0.08;
+    const baseBpm = 68 + Math.round(R() * 18);
+    let bpm = baseBpm;
+    let swing = 0.54 + R() * 0.08;
     const root = 45 + ((R() * 12) | 0);
     const CH = {
       maj9: [0, 4, 7, 11, 14], m9: [0, 3, 7, 10, 14], dom13: [0, 4, 10, 14, 21],
@@ -1271,6 +1295,36 @@ body {
     let kickPat = pick(KICKS);
     let hatDiv = pick([2, 2, 1]);
     let keyShift = 0, melodyRate = 0.14, stabRate = 0.35, breakUntil = 0;
+
+    // moods: every so often the whole feel shifts (tempo, groove, tone, harmony, density).
+    // In digital rain they turn over faster.
+    const MOODS = [
+      { name: "chill",   progs: [0, 1, 2, 4], kicks: [0, 1], hats: [2],    mel: 0.12, stab: 0.3,  half: false, tone: 2600, dBpm: 0,   swing: 0.58, drums: 1,    oct: 0,   key: 0 },
+      { name: "dreamy",  progs: [2, 4],       kicks: [0],    hats: [4],    mel: 0.24, stab: 0.1,  half: true,  tone: 1700, dBpm: -8,  swing: 0.55, drums: 0.7,  oct: 12,  key: 2 },
+      { name: "driving", progs: [0, 1],       kicks: [2, 3, 4], hats: [1], mel: 0.07, stab: 0.55, half: false, tone: 3400, dBpm: 10,  swing: 0.52, drums: 1.15, oct: 0,   key: 0 },
+      { name: "dark",    progs: [3],          kicks: [1, 4], hats: [2, 1], mel: 0.1,  stab: 0.35, half: false, tone: 1400, dBpm: -4,  swing: 0.6,  drums: 1,    oct: -12, key: -3 },
+      { name: "sparse",  progs: [0, 2, 3, 4], kicks: [0],    hats: [4, 2], mel: 0.05, stab: 0.05, half: true,  tone: 2000, dBpm: -6,  swing: 0.56, drums: 0.6,  oct: 0,   key: 0 },
+    ];
+    let mood = MOODS[0], nextMood = 16, halfTime = false, toneBase = 2600, drumGain = 1, voiceOct = 0, inRain = false;
+    let fx = 0;   // how hard the rain is being played with, 0..1; it roughens the groove
+    function setMood(bar) {
+      let m;
+      do m = pick(MOODS); while (m === mood);
+      mood = m;
+      prog = PROGS[pick(m.progs)];
+      kickPat = KICKS[pick(m.kicks)];
+      hatDiv = pick(m.hats);
+      melodyRate = m.mel;
+      stabRate = m.stab;
+      halfTime = m.half;
+      toneBase = m.tone;
+      bpm = baseBpm + m.dBpm;
+      swing = m.swing;
+      drumGain = m.drums;
+      voiceOct = m.oct;
+      keyShift = m.key;
+      nextMood = bar + pick(inRain ? [8, 8, 16] : [16, 24, 32]);
+    }
 
     // every 8 bars the arrangement drifts: new changes, key moves, grooves, breakdowns
     function mutate(bar) {
@@ -1485,7 +1539,8 @@ body {
     // ---- sequencer ----
     function play(n, t) {
       const bar = Math.floor(n / 16), s = n % 16;
-      if (s === 0 && bar > 0 && bar % 8 === 0) mutate(bar);
+      if (s === 0 && bar > 0 && bar >= nextMood) setMood(bar);
+      else if (s === 0 && bar > 0 && bar % 8 === 0) mutate(bar);
       const [deg, q] = prog[bar % prog.length];
       const tones = CH[q];
       let base = root + keyShift + deg;
@@ -1501,13 +1556,22 @@ body {
 
       const fill = bar % 8 === 7 && s >= 12;
       if (bar >= 2 && bar >= breakUntil && !(fill && R() < 0.5)) {
-        if (kickPat.includes(s)) kick(t, 0.85 + R() * 0.15);
-        else if (s === 14 && R() < 0.2) kick(t, 0.5);
-        if (s === 4 || s === 12) snare(t, 0.8 + R() * 0.2);
-        else if ((s === 7 || s === 15) && R() < 0.15) snare(t, 0.25);
-        if (s % hatDiv === 0) hat(t, (s % 4 === 0 ? 0.9 : 0.55) * (0.7 + R() * 0.3));
+        const dg = drumGain;
+        if (halfTime ? (s === 0 || (s === 10 && R() < 0.5)) : kickPat.includes(s)) kick(t, (0.85 + R() * 0.15) * dg);
+        else if (s === 14 && R() < 0.2) kick(t, 0.5 * dg);
+        if (halfTime ? s === 8 : (s === 4 || s === 12)) snare(t, (0.8 + R() * 0.2) * dg);
+        else if ((s === 7 || s === 15) && R() < 0.15) snare(t, 0.25 * dg);
+        if (s % hatDiv === 0) hat(t, (s % 4 === 0 ? 0.9 : 0.55) * (0.7 + R() * 0.3) * dg);
+        // played-with rain roughens the groove: busier hats, ghost snares, extra kicks, stutter rolls
+        else if (R() < fx * 0.6) hat(t, (0.3 + R() * 0.4) * dg);
+        if (R() < fx * 0.18) snare(t, (0.2 + R() * 0.3) * dg);
+        if ((s === 6 || s === 14) && R() < fx * 0.35) kick(t, 0.6 * dg);
+        if (fx > 0.5 && s % 4 === 3 && R() < fx * 0.3) {
+          const sd = 60 / bpm / 16;
+          for (let i = 0; i < 4; i++) snare(t + i * sd, (0.25 + i * 0.12) * dg);
+        }
       }
-      if (s === 0) tones.forEach((iv, i) => keys(t + i * 0.012, base + 12 + iv, barDur * 0.95, 0.9));
+      if (s === 0) tones.forEach((iv, i) => keys(t + i * 0.012, base + 12 + voiceOct + iv, barDur * 0.95, 0.9));
       if (s === 6 && R() < stabRate) tones.slice(1).forEach((iv, i) => keys(t + i * 0.01, base + 12 + iv, barDur * 0.4, 0.5));
       if (bar >= 1) {
         if (s === 0) bass(t, base - 12, barDur * 0.45, 1);
@@ -1552,13 +1616,16 @@ body {
       if (!on) return;
       const t = ctx.currentTime;
       const s = Math.min(st.speed, 5) * st.hover;
-      const e = Math.min(1, st.energy + st.collapse);
+      fx = Math.min(1, st.rainE / 1.1) * st.rainMix;
+      // messing with the rain crunches, muffles and warbles the music
+      const e = Math.min(1, st.energy + st.collapse + fx * 0.6);
       const rain = st.rainMix;
+      inRain = rain > 0.5;
       hissGain.gain.setTargetAtTime((Math.min(0.22, s * 0.06) + st.glitch * 0.04) * (1 - 0.6 * rain), t, 0.05);
       hissBP.frequency.setTargetAtTime((500 + s * 1400 + st.energy * 1200) * (1 - rain) + (250 + s * 500) * rain, t, 0.05);
       rainBed.gain.setTargetAtTime(0.05 * st.rainAlpha, t, 0.4);
       if (rain > 0.9 && !arrived) { arrived = true; rebuild(t); }
-      musicLP.frequency.setTargetAtTime(2600 * (1 - 0.6 * e) * (1 - 0.8 * st.collapse) + 200, t, 0.15);
+      musicLP.frequency.setTargetAtTime(toneBase * (1 - 0.6 * e) * (1 - 0.8 * st.collapse) + 200, t, 0.15);
       wobbleDepth.gain.setTargetAtTime(0.0012 + e * 0.004 + st.collapse * 0.006, t, 0.2);
       wobbleLFO.frequency.setTargetAtTime(0.55 + e * 3.5, t, 0.3);
       const cl = Math.round(e * 10) / 10;
@@ -1584,7 +1651,19 @@ body {
       if (document.hidden) ctx.suspend();
       else if (on) ctx.resume();
     });
-    return { toggle, frame, glitch, pulse };
+    // a click in digital rain: a bright plucked note from the current chord over a wet splash
+    function splash() {
+      if (!on) return;
+      const t = ctx.currentTime;
+      const [deg, q] = prog[Math.floor(step / 16) % prog.length];
+      let base = root + keyShift + deg;
+      while (base > 57) base -= 12;
+      const note = base + 24 + pick(CH[q]);
+      tone(t, "triangle", mtof(note), 0.09, 0.004, 0.6, sfx);
+      tone(t + 0.07, "sine", mtof(note + 12), 0.04, 0.004, 0.5, sfx);
+      noiseHit(t, 0.25, "bandpass", 2400 + R() * 2000, 1.2, 0.12, sfx);
+    }
+    return { toggle, frame, glitch, pulse, splash };
   })();
 
   const sndBtn = $("snd");
@@ -1607,7 +1686,7 @@ body {
     velScreen: new THREE.Vector2(), velScreenTarget: new THREE.Vector2(), splitDir: new THREE.Vector2(1, 0),
     velWorld: new THREE.Vector3(), lastHit: null, parX: 0, parY: 0,
     // digital rain: hidden unlock progress, direction reversals, mode timeline
-    unlock: 0, rev: 0, lvx: 0, lvy: 0, pulse: 0, peak: 0, rainE: 0, burst: 0, clickBoom: 0, rainRecoloured: false, mode: "af", modeT: 0, rainMix: 0, rainAlpha: 0, gravity: 0, damp: 0, press: 0,
+    unlock: 0, rev: 0, lvx: 0, lvy: 0, pulse: 0, peak: 0, rainE: 0, burst: 0, clickBoom: 0, rainHue: 0, rainShape: 0, shapeSize: 1, rainRecoloured: false, mode: "af", modeT: 0, rainMix: 0, rainAlpha: 0, gravity: 0, damp: 0, press: 0,
   };
   const UNLOCK = 9;
   const REST = { x: 0.1, y: -0.12 };
@@ -1640,7 +1719,17 @@ body {
     pointer.lt = 0;
     pointer.down = e.pointerType === "mouse";
     st.clickBoom = 1;   // a click blows the particles apart under the cursor
-    if (st.mode === "rain") { st.burst = 1; st.rainE = Math.min(1.5, st.rainE + 0.2); }   // and splashes the rain outward
+    if (st.mode === "rain") {
+      // and splashes the rain outward, turns its colour and switches the drop shape and size
+      st.burst = 1;
+      st.rainE = Math.min(1.5, st.rainE + 0.2);
+      st.rainHue += 0.8 + Math.random() * 1.6;
+      let shape;
+      do shape = Math.floor(Math.random() * 5); while (shape === st.rainShape);
+      st.rainShape = shape;
+      weather.grain = 0.45 + Math.random() * 0.9;
+      Sound.splash();
+    }
     onMove(e);
   }, { passive: true });
   addEventListener("pointerup", (e) => { pointer.down = false; if (e.pointerType !== "mouse") onLeave(); });
@@ -1826,7 +1915,11 @@ body {
       ru.uBurst.value = st.burst;
       st.burst = 0;
       rp.uDensity.value = wc.dens + (1 - wc.dens) * wx(3, 0.035);
-      rainUniforms.uGrain.value = wc.grain + wc.grainAmp * wx(4, 0.03);
+      // clicks restyle the rain: shape switches instantly, size and colour glide to the new look
+      st.shapeSize += ([1, 1.1, 2.2, 1.9, 2.8][st.rainShape] - st.shapeSize) * Math.min(1, dt * 8);
+      rainUniforms.uShape.value = st.rainShape;
+      rainUniforms.uHue.value += (st.rainHue - rainUniforms.uHue.value) * Math.min(1, dt * 4);
+      rainUniforms.uGrain.value = (wc.grain + wc.grainAmp * wx(4, 0.03)) * st.shapeSize;
       fl.uCursor.value.set(hit.x, hit.y);
       fl.uCursorVel.value.set(st.velWorld.x, st.velWorld.y).multiplyScalar(pointer.inside ? 1 : 0);
       fl.uSplat.value = rm * (1.6 + st.press * 1.2) * (1 + st.rainE * 0.8);
