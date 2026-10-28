@@ -453,7 +453,7 @@ body {
       vec2 tear = vec2(wHash(vec2(slice, tick)) - 0.5, (wHash(vec2(slice + 7.0, tick)) - 0.5) * 0.3);
       vec2 shove = dc / (length(dc) + 0.15) * 0.35;
       vec2 ripple = vec2(sin(q.y * 9.0 + uWarpT * 4.0), cos(q.x * 8.0 + uWarpT * 3.5)) * 0.5;
-      return (tear * 0.16 + ripple * 0.04) * (patchy + local) - shove * local * 0.12;
+      return (tear * 0.22 + ripple * 0.04) * (patchy + local) - shove * local * 0.16;
     }
     vec2 warp(vec2 q) { return q + warpOffset(q); }
   `;
@@ -463,7 +463,8 @@ body {
   const VEL_FRAG = `
     uniform sampler2D tPos; uniform sampler2D tVel; uniform sampler2D tHome;
     uniform float uTime, uDt, uEnergy, uCollapse, uGlitch, uInit, uHover, uSpeed, uRadius, uMotion;
-    uniform float uGravity, uDampBoost, uStill, uKick;
+    uniform float uGravity, uDampBoost, uStill, uKick, uFlowAmt;
+    uniform sampler2D tFlow; uniform vec2 uFlowMin, uFlowSize;
     uniform vec3 uRayO, uRayD, uMouseVel;
     varying vec2 vUv;
     ${HASH}
@@ -492,7 +493,12 @@ body {
       // home spring, loosened by global instability and local damage
       float loosen = clamp(inst * 0.55 + dmg * 0.45, 0.0, 0.97);
       float k = mix(10.0, 0.5, loosen) * (0.55 + r * 0.9) * (1.0 - 0.985 * uCollapse) * (1.0 - 0.92 * uGravity);
+      // digital rain: strong air currents tear fragments loose and sweep them off in long arcs
+      vec2 flowV = texture2D(tFlow, (p.xy - uFlowMin) / uFlowSize).xy * uFlowAmt;
+      float sweep = clamp(length(flowV) * 0.35, 0.0, 1.0) * (0.4 + r * 0.6);
+      k *= 1.0 - 0.9 * sweep;
       vec3 acc = (h - p) * k;
+      acc.xy += (flowV * 1.5 - v.xy) * sweep * 3.0;
 
       // turbulence: idle shimmer up to full abstraction
       acc += n * ((0.25 + inst * 2.4 + dmg * 1.4 + uGlitch * 1.5) * uMotion * (1.0 - uStill) + uCollapse * 10.0);
@@ -515,8 +521,9 @@ body {
       acc += normalize(p + rnd * 0.6 + vec3(1e-4)) * uCollapse * 2.5 * (0.2 + r);
       acc.x += sign(p.x + rnd.x) * uCollapse * 4.5 * (0.3 + r);   // fling wide, out to the sides
 
-      // beat: a small bounce outward and up, which the home spring pulls back
-      v += (normalize(h + rnd * 0.4 + vec3(1e-4)) * 0.3 + vec3(0.0, 0.35, 0.0)) * uKick * (0.4 + r);
+      // beat: an explosive outward burst of particles that the home spring snaps back; small beats twitch, big ones blow out
+      vec3 outward = normalize(vec3(h.xy * vec2(0.6, 1.0), h.z + 0.4) + rnd * 0.9 + vec3(1e-4));
+      v += (outward * 1.6 + vec3(0.0, 0.3, 0.0)) * uKick * uKick * (0.3 + r * 1.2);
 
       // digital rain transition: gravity drags the cloud down while it loses momentum
       acc.y -= uGravity * 5.0;
@@ -529,6 +536,8 @@ body {
       // damage accumulates where the pointer works the surface, heals slowly
       dmg += f * (0.3 + min(uSpeed, 5.0) * 1.2) * uDt * 2.0;
       dmg += uCollapse * uDt * 0.6;
+      dmg += uKick * uKick * 0.6 * r;   // beat-blown particles flare and swell
+      dmg += sweep * uDt * 1.2;          // swept fragments stay lit while they fly
       dmg -= uDt * mix(0.9, 0.12, clamp(inst, 0.0, 1.0));
       gl_FragColor = vec4(v, clamp(dmg, 0.0, 1.5));
     }
@@ -567,7 +576,7 @@ body {
     attribute vec2 aRef; attribute vec4 aRand; attribute float aKind;
     uniform sampler2D tPos; uniform sampler2D tHome;
     uniform float uTime, uEnergy, uGlitch, uCollapse, uPR, uSize, uCamDist, uMotion;
-    uniform float uRain; uniform sampler2D tLight;
+    uniform float uRain, uPulse; uniform sampler2D tLight;
     ${WARP_GLSL}
     uniform vec3 uPrimary, uHighlight, uSoft, uDeep;
     varying vec3 vColor; varying float vAlpha; varying float vShape; varying float vSeed;
@@ -599,6 +608,7 @@ body {
 
       float big = step(0.988, aRand.w);
       float sz = uSize * (0.55 + aRand.z * 1.1) * (1.0 + dmg * 0.7) * (1.0 + big * 2.2);
+      sz *= 1.0 + uPulse * uPulse * 2.5 * step(0.55, aRand.w);   // beat: chunky pixels pop
       if (aKind > 1.5) sz *= 0.75;
       gl_PointSize = max(1.0, sz * uPR * uCamDist / -mv.z);
 
@@ -634,7 +644,8 @@ body {
       vColor = c * depth;
       vAlpha = (aKind > 1.5 ? 0.28 : 0.4) * (0.6 + 0.4 * aRand.z) * (1.0 + sw * 0.8);
       // digital rain: the fill dissolves and only a faint outline remains; the rain draws the letters
-      vAlpha *= mix(1.0, (aKind > 0.5 && aKind < 1.5) ? 0.5 : 0.0, uRain);
+      // broken-off fragments light up while they fly, so the outline visibly shatters
+      vAlpha *= mix(1.0, ((aKind > 0.5 && aKind < 1.5) ? 0.5 : 0.0) + clamp(dmg, 0.0, 1.0) * 0.8, uRain);
       vShape = aRand.w;
       vSeed = aRand.x;
     }
@@ -760,6 +771,7 @@ body {
     uTime: { value: 0 }, uDt: { value: 0.016 }, uEnergy: { value: 0 }, uCollapse: { value: 0 }, uGlitch: { value: 0 },
     uInit: { value: 1 }, uHover: { value: 0 }, uSpeed: { value: 0 }, uRadius: { value: 0.3 }, uMotion: { value: MOTION },
     uGravity: { value: 0 }, uDampBoost: { value: 0 }, uStill: { value: 0 }, uKick: { value: 0 },
+    uFlowAmt: { value: 0 }, tFlow: { value: null }, uFlowMin: { value: new THREE.Vector2() }, uFlowSize: { value: new THREE.Vector2(1, 1) },
     uRayO: { value: V3() }, uRayD: { value: new THREE.Vector3(0, 0, -1) }, uMouseVel: { value: V3() },
   });
   const posMat = fsMat(POS_FRAG, {
@@ -789,7 +801,7 @@ body {
       tPos: { value: null }, tHome: { value: homeTex }, uTime: { value: 0 }, uEnergy: { value: 0 }, uGlitch: { value: 0 },
       uPrimary: { value: PAL.primary }, uHighlight: { value: PAL.highlight }, uSoft: { value: PAL.soft }, uDeep: { value: PAL.deep },
       uCollapse: { value: 0 }, uPR: { value: PR }, uSize: { value: coarse ? 1.25 : 1.15 }, uCamDist: { value: 6 }, uMotion: { value: MOTION },
-      uRain: { value: 0 }, tLight: { value: null }, uWarp: warpU, uWarpT: warpT, uWarpL: warpL, uWarpC: warpC,
+      uRain: { value: 0 }, uPulse: { value: 0 }, tLight: { value: null }, uWarp: warpU, uWarpT: warpT, uWarpL: warpL, uWarpC: warpC,
     },
     transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending,
   });
@@ -1045,7 +1057,7 @@ body {
   const RAIN_VERT = `
     attribute vec2 aRef; attribute vec4 aRand; attribute float aEnd;
     uniform sampler2D tRPos; uniform sampler2D tRVel;
-    uniform float uPR, uCamDist, uAlpha, uSize, uGrain;
+    uniform float uPR, uCamDist, uAlpha, uSize, uGrain, uTear, uTearT;
     uniform vec3 uCamLocal;
     uniform vec3 uPrimary, uHighlight, uSoft, uDeep;
     varying vec3 vColor; varying float vAlpha; varying float vShape; varying float vSeed;
@@ -1056,6 +1068,11 @@ body {
       vec3 p = P.xyz - V.xyz * aEnd * (0.02 + aRand.z * 0.03) * uGrain;
       vec4 mv = modelViewMatrix * vec4(p, 1.0);
       gl_Position = projectionMatrix * mv;
+      // torn scanlines: whole rows of rain jump sideways during glitches
+      float trow = floor((gl_Position.y / gl_Position.w * 0.5 + 0.5) * 48.0);
+      float ttick = floor(uTearT * 14.0);
+      float ton = step(1.0 - uTear * 0.35, wHash(vec2(trow, ttick)));
+      gl_Position.x += ton * (wHash(vec2(trow * 1.7, ttick + 3.0)) - 0.5) * 0.4 * uTear * gl_Position.w;
       float big = step(0.985, aRand.w);
       gl_PointSize = max(1.0, uSize * uGrain * (0.5 + aRand.z * 1.1) * (1.0 + big * 2.5) * uPR * uCamDist / -mv.z);
 
@@ -1097,6 +1114,8 @@ body {
   renderer.setRenderTarget(null);
 
   const flowMin = new THREE.Vector2(-4, -3), flowSize = new THREE.Vector2(8, 6);
+  velMat.uniforms.uFlowMin.value = flowMin;
+  velMat.uniforms.uFlowSize.value = flowSize;
   const rainVelMat = fsMat(RAIN_VEL_FRAG, {
     tRPos: { value: null }, tRVel: { value: null }, tFlow: { value: null }, tSeedVel: { value: null }, tSdf: { value: sdfTex },
     uTime: { value: 0 }, uDt: { value: 0.016 }, uSeed: { value: 0 }, uHover: { value: 0 }, uPress: { value: 0 }, uSpeed: { value: 0 },
@@ -1147,7 +1166,7 @@ body {
 
   const rainUniforms = {
     tRPos: { value: null }, tRVel: { value: null }, tSdf: { value: sdfTex }, uPartZ: { value: partZ }, uPartD: { value: partD },
-    uPR: { value: PR }, uCamDist: { value: 6 }, uAlpha: { value: 0 }, uSize: { value: coarse ? 1.3 : 1.2 }, uGrain: { value: 1 }, uSlab: { value: SLAB }, uMargin: { value: MARGIN }, uWarp: warpU, uWarpT: warpT, uWarpL: warpL, uWarpC: warpC, uCamLocal: { value: V3() },
+    uPR: { value: PR }, uCamDist: { value: 6 }, uAlpha: { value: 0 }, uSize: { value: coarse ? 1.3 : 1.2 }, uGrain: { value: 1 }, uTear: { value: 0 }, uTearT: { value: 0 }, uSlab: { value: SLAB }, uMargin: { value: MARGIN }, uWarp: warpU, uWarpT: warpT, uWarpL: warpL, uWarpC: warpC, uCamLocal: { value: V3() },
     uPrimary: { value: PAL.primary }, uHighlight: { value: PAL.highlight }, uSoft: { value: PAL.soft }, uDeep: { value: PAL.deep },
   };
   const rainMatOpts = { uniforms: rainUniforms, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending };
@@ -1274,10 +1293,11 @@ body {
         return k;
       }
       pulses.length = 0;
-      const bar = Math.floor(performance.now() / 1000 / ((60 / bpm) * 4));
-      if (bar === vBar) return 0;
-      vBar = bar;
-      return bar % 2 ? 0 : (bar % 8 === 0 ? 1 : bar % 4 === 0 ? 0.75 : 0.5);
+      const beat = Math.floor(performance.now() / 1000 / (60 / bpm));
+      if (beat === vBar) return 0;
+      vBar = beat;
+      const bar = Math.floor(beat / 4);
+      return beat % 4 ? 0.28 : bar % 8 === 0 ? 1 : bar % 4 === 0 ? 0.8 : bar % 2 === 0 ? 0.6 : 0.42;
     }
 
     let ctx = null, on = false, timer = null, step = 0, nextT = 0;
@@ -1472,10 +1492,11 @@ body {
       while (base > 57) base -= 12;
       const barDur = (60 / bpm) * 4;
 
-      if (s === 0 && bar >= 2 && bar % 2 === 0) {
-        const k = bar % 8 === 0 ? 1 : bar % 4 === 0 ? 0.75 : 0.5;
+      // every beat pulses; downbeats and phrase starts hit harder
+      if (s % 4 === 0 && bar >= 1) {
+        const k = s !== 0 ? 0.28 : bar % 8 === 0 ? 1 : bar % 4 === 0 ? 0.8 : bar % 2 === 0 ? 0.6 : 0.42;
         pulses.push({ t, k });
-        boom(t, k);
+        if (s === 0 && bar >= 2 && bar % 2 === 0) boom(t, k);
       }
 
       const fill = bar % 8 === 7 && s >= 12;
@@ -1586,7 +1607,7 @@ body {
     velScreen: new THREE.Vector2(), velScreenTarget: new THREE.Vector2(), splitDir: new THREE.Vector2(1, 0),
     velWorld: new THREE.Vector3(), lastHit: null, parX: 0, parY: 0,
     // digital rain: hidden unlock progress, direction reversals, mode timeline
-    unlock: 0, rev: 0, lvx: 0, lvy: 0, pulse: 0, peak: 0, rainE: 0, burst: 0, rainRecoloured: false, mode: "af", modeT: 0, rainMix: 0, rainAlpha: 0, gravity: 0, damp: 0, press: 0,
+    unlock: 0, rev: 0, lvx: 0, lvy: 0, pulse: 0, peak: 0, rainE: 0, burst: 0, clickBoom: 0, rainRecoloured: false, mode: "af", modeT: 0, rainMix: 0, rainAlpha: 0, gravity: 0, damp: 0, press: 0,
   };
   const UNLOCK = 9;
   const REST = { x: 0.1, y: -0.12 };
@@ -1618,7 +1639,8 @@ body {
   addEventListener("pointerdown", (e) => {
     pointer.lt = 0;
     pointer.down = e.pointerType === "mouse";
-    if (st.mode === "rain") { st.burst = 1; st.rainE = Math.min(1.5, st.rainE + 0.15); }   // a click splashes the rain outward
+    st.clickBoom = 1;   // a click blows the particles apart under the cursor
+    if (st.mode === "rain") { st.burst = 1; st.rainE = Math.min(1.5, st.rainE + 0.2); }   // and splashes the rain outward
     onMove(e);
   }, { passive: true });
   addEventListener("pointerup", (e) => { pointer.down = false; if (e.pointerType !== "mouse") onLeave(); });
@@ -1660,7 +1682,7 @@ body {
     st.collapse += (ct - st.collapse) * Math.min(1, dt * (ct > st.collapse ? 3 : 2.2));
 
     // glitch pulses: rare at rest, frequent under pressure, lingering after
-    const rate = (0.12 + st.energy * 1.2 + Math.min(st.speed, 4) * 0.4 * st.hover) * (reduced ? 0.4 : 1) * (st.mode === "rain" ? 0 : 1);
+    const rate = (0.12 + st.energy * 1.2 + Math.min(st.speed, 4) * 0.4 * st.hover) * (reduced ? 0.4 : 1) * (st.mode === "rain" ? 0.6 + st.rainE * 1.5 : 1);
     if (Math.random() < rate * dt) {
       const g = 0.3 + Math.random() * 0.7;
       if (g > st.glitch) Sound.glitch(g);
@@ -1684,7 +1706,7 @@ body {
       st.energy = 1.4 * chaos;
       st.collapse = chaos;
       st.collapseHold = 0;
-      st.glitch *= chaos;
+      if (tr) st.glitch *= chaos;
       st.gravity = tr ? smooth(1.0, 1.9, T) * (1 - smooth(3.0, 4.3, T)) : 0;
       st.damp = tr ? smooth(1.4, 2.6, T) * (1 - smooth(4.6, 6.2, T)) : 0;
       st.rainMix = tr ? smooth(3.0, 6.8, T) : 1;
@@ -1728,21 +1750,27 @@ body {
     const vu = velMat.uniforms;
     vu.uTime.value = t; vu.uDt.value = dt; vu.uEnergy.value = st.energy; vu.uCollapse.value = st.collapse;
     // in digital rain the cursor only nudges the outline gently
-    vu.uGlitch.value = st.glitch; vu.uHover.value = st.hover * (1 - 0.3 * rm); vu.uSpeed.value = st.speed * (1 - 0.6 * rm);
+    // in digital rain the word still shatters under the cursor; clicks blow a hole in it
+    st.clickBoom *= Math.exp(-dt * 6);
+    vu.uGlitch.value = st.glitch; vu.uHover.value = st.hover; vu.uSpeed.value = Math.max(st.speed * (1 - 0.3 * rm), st.clickBoom * 4);
+    if (rm > 0) vu.uEnergy.value = Math.max(st.energy, st.rainE * 0.7 * rm);
     vu.uMouseVel.value.copy(st.velWorld);
-    vu.uGravity.value = st.gravity; vu.uDampBoost.value = st.damp; vu.uStill.value = rm;
+    vu.uGravity.value = st.gravity; vu.uDampBoost.value = st.damp; vu.uStill.value = rm * (1 - Math.min(1, st.rainE));
     const pu = posMat.uniforms;
     pu.uTime.value = t; pu.uDt.value = dt; pu.uGlitch.value = st.glitch; pu.uEnergy.value = st.energy;
     const pt = ptMat.uniforms;
     pt.uTime.value = t; pt.uEnergy.value = st.energy; pt.uGlitch.value = st.glitch; pt.uCollapse.value = st.collapse;
     pt.uRain.value = rm;
+    pt.uPulse.value = st.pulse;
     const tu = trailMat.uniforms;
     tu.uTime.value = t; tu.uEnergy.value = st.energy;
     tu.uDecay.value = Math.max(0.3 * rm, Math.min(0.95, 0.35 + Math.min(st.energy, 1) * 0.5 + st.glitch * 0.1 + st.collapse * 0.1));
     tu.uDrift.value.set(st.velScreen.x * dt * 0.25 * st.hover * (1 - rm), st.velScreen.y * dt * 0.25 * st.hover * (1 - rm) + 0.0008 * st.energy);
     const fu = finalMat.uniforms;
     fu.uTime.value = t; fu.uEnergy.value = st.energy; fu.uGlitch.value = st.glitch; fu.uSpeed.value = st.speed;
-    fu.uCollapse.value = st.collapse; fu.uHover.value = st.hover * (1 - rm);
+    fu.uCollapse.value = st.collapse; fu.uHover.value = st.hover * (1 - 0.35 * rm);
+    // digital rain glitches too: block tears, colour split and pixel shifts grow with rain energy
+    if (rm > 0) fu.uEnergy.value = Math.max(st.energy, (0.25 + st.rainE * 0.7) * rm);
     fu.uMouse.value.set(pointer.ndc.x * 0.5 + 0.5, pointer.ndc.y * 0.5 + 0.5);
     fu.uSplitDir.value.copy(st.splitDir);
 
@@ -1766,14 +1794,14 @@ body {
 
     // letter warp in digital rain: a faint ripple at rest, stronger as you stir and on the beat
     // rain energy: messing with the rain builds it up, and it drains slowly when left alone
-    st.rainE = Math.max(0, Math.min(1.5, st.rainE + dt * rm * (Math.min(st.speed, 4) * 0.22 * st.hover + st.press * 0.6) - dt * 0.12));
-    const warpTarget = rm * (0.5 + st.pulse * 0.8 + st.rainE * 0.8);
+    st.rainE = Math.max(0, Math.min(1.5, st.rainE + dt * rm * (Math.min(st.speed, 4) * 0.18 * st.hover + st.press * 0.6) - dt * 0.25));
+    const warpTarget = rm * (0.5 + st.pulse * 0.8 + st.rainE * 1.6);
     warpU.value += (warpTarget - warpU.value) * Math.min(1, dt * 3);
-    const localTarget = rm * (Math.min(st.speed, 3) * 0.6 * st.hover + st.press * 1.2);
+    const localTarget = rm * (Math.min(st.speed, 3) * 1.0 * st.hover + st.press * 1.8 + st.clickBoom * 1.5);
     warpL.value += (localTarget - warpL.value) * Math.min(1, dt * 5);
     warpC.value.set(hit.x, hit.y, 0);
     warpT.value = t;
-    st.pulse *= Math.exp(-dt * 2.2);
+    st.pulse *= Math.exp(-dt * 3.2);
     fu.uPulse.value = st.pulse;
 
     if (rainSeeded) {
@@ -1802,9 +1830,15 @@ body {
       fl.uCursor.value.set(hit.x, hit.y);
       fl.uCursorVel.value.set(st.velWorld.x, st.velWorld.y).multiplyScalar(pointer.inside ? 1 : 0);
       fl.uSplat.value = rm * (1.6 + st.press * 1.2) * (1 + st.rainE * 0.8);
+      // the letters feel the same currents as the rain, and the cursor reaches further
+      vu.tFlow.value = flowRT[fCur].texture;
+      vu.uFlowAmt.value = rm;
+      vu.uRadius.value = 0.3 * (1 + rm * 1.2);
       rainUniforms.uAlpha.value = st.rainAlpha;
       rainUniforms.uCamDist.value = ptMat.uniforms.uCamDist.value;
       rainUniforms.uCamLocal.value.copy(camera.position).applyMatrix4(inv);
+      rainUniforms.uTear.value = (st.glitch * 0.9 + st.rainE * 0.25) * MOTION;
+      rainUniforms.uTearT.value = t;
     }
     Sound.frame(st);
   }
