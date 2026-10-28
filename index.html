@@ -90,18 +90,25 @@ body {
 .bl { width: min(176px, 42vw); }
 .bar { height: 3px; background: var(--rule); position: relative; overflow: hidden; }
 .bar i { position: absolute; inset: 0 auto 0 0; width: 100%; background: linear-gradient(90deg, var(--violet), var(--lavender) 40%, var(--acid)); transition: width 0.2s linear; }
-#snd {
+/* sound and full screen sit together bottom right, where video players keep them */
+.controls {
   position: fixed;
   z-index: 3;
   right: calc(max(16px, env(safe-area-inset-right, 0px)) + 4px);
   bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
   display: flex;
   align-items: center;
+  gap: 2px;
+  color: var(--acid);
+}
+.ctl {
+  display: flex;
+  align-items: center;
   gap: 8px;
   padding: 8px 10px;
   background: transparent;
   border: 0;
-  color: var(--acid);
+  color: inherit;
   font: 400 10px/1 var(--mono);
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -109,11 +116,11 @@ body {
   cursor: pointer;
   transition: opacity 0.2s;
 }
-#snd:hover, #snd[aria-pressed="true"] { opacity: 0.85; }
-#snd:focus-visible { outline: 1px solid currentColor; outline-offset: 2px; opacity: 1; }
-#snd .waves { display: none; }
-#snd[aria-pressed="true"] .waves { display: inline; }
-#snd[aria-pressed="true"] .mute { display: none; }
+.ctl:hover, .ctl[aria-pressed="true"] { opacity: 0.85; }
+.ctl:focus-visible { outline: 1px solid currentColor; outline-offset: 2px; opacity: 1; }
+#snd .waves, #fs .exit { display: none; }
+#snd[aria-pressed="true"] .waves, #fs[aria-pressed="true"] .exit { display: inline; }
+#snd[aria-pressed="true"] .mute, #fs[aria-pressed="true"] .enter { display: none; }
 .fail { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding-inline: 24px; color: var(--lavender); font: 300 12px/1.8 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
 @media (max-width: 480px) {
   .hud { font-size: 9px; }
@@ -121,16 +128,24 @@ body {
 }
 </style>
 
-<canvas id="stage" aria-label="An AF monogram built from a glitching cloud of green and violet particles. Move the pointer through it to disturb it."></canvas>
+<canvas id="stage" aria-label="The word AARON built from a glitching cloud of coloured particles. Move the pointer through it to disturb it."></canvas>
 
-<button id="snd" type="button" aria-pressed="false" aria-label="Turn sound on">
-  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-    <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/>
-    <path class="waves" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-    <path class="mute" d="M16.5 9.5l5 5m0-5l-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-  </svg>
-  <span>Sound</span>
-</button>
+<div class="controls" id="ctl">
+  <button id="snd" class="ctl" type="button" aria-pressed="false" aria-label="Turn sound on">
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+      <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/>
+      <path class="waves" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      <path class="mute" d="M16.5 9.5l5 5m0-5l-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+    </svg>
+    <span>Sound</span>
+  </button>
+  <button id="fs" class="ctl" type="button" aria-pressed="false" aria-label="Full screen">
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+      <path class="enter" d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square"/>
+      <path class="exit" d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square"/>
+    </svg>
+  </button>
+</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
@@ -149,7 +164,7 @@ body {
   const canvas = $("stage");
   let renderer;
   try {
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: "high-performance" });
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: "default" });
   } catch (e) {
     fail("This piece needs WebGL, and your browser has it switched off.");
     return;
@@ -168,13 +183,28 @@ body {
     simType = ext("OES_texture_float") ? THREE.FloatType : THREE.HalfFloatType;
     fxType = THREE.UnsignedByteType;
   }
+  // check the chosen formats can really be rendered to, and step down if not
+  const glc = renderer.getContext();
+  const canRender = (type) => {
+    const rt = new THREE.WebGLRenderTarget(4, 4, {
+      type, format: THREE.RGBAFormat, depthBuffer: false, stencilBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+    });
+    renderer.setRenderTarget(rt);
+    const ok = glc.checkFramebufferStatus(glc.FRAMEBUFFER) === glc.FRAMEBUFFER_COMPLETE;
+    renderer.setRenderTarget(null);
+    rt.dispose();
+    return ok;
+  };
+  if (!canRender(simType)) simType = simType === THREE.FloatType && canRender(THREE.HalfFloatType) ? THREE.HalfFloatType : null;
+  if (fxType !== THREE.UnsignedByteType && !canRender(fxType)) fxType = THREE.UnsignedByteType;
+  if (!simType) { fail("This piece needs a GPU that can render floating-point textures."); return; }
 
   const coarse = matchMedia("(pointer: coarse)").matches || Math.min(innerWidth, innerHeight) < 560;
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const MOTION = reduced ? 0.35 : 1.0;
   const SIM = coarse ? 224 : 320;
   const N = SIM * SIM;
-  const PR = Math.min(window.devicePixelRatio || 1, 2);
+  const PR = Math.min(window.devicePixelRatio || 1, coarse ? 1.75 : 2);
   renderer.setPixelRatio(PR);
   renderer.setClearColor(0x000000, 1);
 
@@ -206,8 +236,7 @@ body {
       if (Math.abs(PAL[key].r - palTarget[key].r) + Math.abs(PAL[key].g - palTarget[key].g) + Math.abs(PAL[key].b - palTarget[key].b) > 0.004) done = false;
     }
     if (done) { for (const key in PAL) PAL[key].copy(palTarget[key]); palTarget = null; }
-    canvas.style.background = "#" + PAL.bgFar.getHexString();
-    sndBtn.style.color = "#" + PAL.primary.getHexString();
+    ctlBox.style.color = "#" + PAL.primary.getHexString();
   }
   canvas.style.background = "#" + PAL.bgFar.getHexString();
 
@@ -221,7 +250,7 @@ body {
   function raster(draw) {
     const c = document.createElement("canvas");
     c.width = c.height = S;
-    const g = c.getContext("2d");
+    const g = c.getContext("2d", { willReadFrequently: true });
     g.setTransform(S / SPAN, 0, 0, -S / SPAN, S / 2, S / 2);   // draw in world units, y up
     g.fillStyle = g.strokeStyle = "#fff";
     g.lineWidth = T;
@@ -274,7 +303,7 @@ body {
     letterData.push(raster((g) => GLYPH[ch].draw(g, x, w)));
     penX += w + GAP;
   });
-  const unionData = new Uint8ClampedArray(S * S * 4);
+  let unionData = new Uint8ClampedArray(S * S * 4);
   letterData.forEach((d) => { for (let i = 3; i < d.length; i += 4) unionData[i] = Math.max(unionData[i], d[i]); });
 
   function collect(data) {
@@ -504,7 +533,7 @@ body {
       acc += n * ((0.25 + inst * 2.4 + dmg * 1.4 + uGlitch * 1.5) * uMotion * (1.0 - uStill) + uCollapse * 10.0);
 
       // local field near the pointer: a noise partition decides repel, attract or swirl
-      float mode = snoise(h * 2.2 + vec3(uTime * 0.2));
+      float mode = f > 0.0 ? snoise(h * 2.2 + vec3(uTime * 0.2)) : 0.0;
       float repel = smoothstep(-0.25, 0.35, mode);
       acc += dir * f * mix(-7.0, 16.0, repel);
       acc += cross(uRayD, dir) * f * 9.0 * (1.0 - abs(mode));
@@ -576,7 +605,7 @@ body {
     attribute vec2 aRef; attribute vec4 aRand; attribute float aKind;
     uniform sampler2D tPos; uniform sampler2D tHome;
     uniform float uTime, uEnergy, uGlitch, uCollapse, uPR, uSize, uCamDist, uMotion;
-    uniform float uRain, uPulse; uniform sampler2D tLight;
+    uniform float uRain, uPulse, uPulseAmp; uniform sampler2D tLight;
     ${WARP_GLSL}
     uniform vec3 uPrimary, uHighlight, uSoft, uDeep;
     varying vec3 vColor; varying float vAlpha; varying float vShape; varying float vSeed;
@@ -593,7 +622,7 @@ body {
            * fl * (0.04 + uEnergy * 0.25) * uMotion * (1.0 - uRain);
       p.xy += (vec2(hash21(vec2(aRand.w, tq + 1.0)), hash21(vec2(aRand.x, tq + 2.0))) - 0.5) * 0.004 * uMotion * (1.0 - uRain);
       // digital rain: the outline tears with the same distortion the rain sees (inverse, so they line up)
-      p.xy -= warpOffset(h.xy) * uRain;
+      if (uRain > 0.0) p.xy -= warpOffset(h.xy) * uRain;
 
       vec4 mv = modelViewMatrix * vec4(p, 1.0);
       vec4 clip = projectionMatrix * mv;
@@ -608,9 +637,9 @@ body {
 
       float big = step(0.988, aRand.w);
       float sz = uSize * (0.55 + aRand.z * 1.1) * (1.0 + dmg * 0.7) * (1.0 + big * 2.2);
-      sz *= 1.0 + uPulse * uPulse * 2.5 * step(0.55, aRand.w);   // beat: chunky pixels pop
+      sz *= 1.0 + uPulse * uPulse * uPulseAmp * step(0.55, aRand.w);   // beat: chunky pixels pop
       if (aKind > 1.5) sz *= 0.75;
-      gl_PointSize = max(1.0, sz * uPR * uCamDist / -mv.z);
+      gl_PointSize = min(max(1.0, sz * uPR * uCamDist / -mv.z), 12.0 * uPR);
 
       vec3 acid = uPrimary;
       vec3 lime = uHighlight;
@@ -629,7 +658,8 @@ body {
 
       // the scanner's sweep travelling up the form
       float sweepY = mod(uTime * 0.45, 4.0) - 2.0;
-      float sw = exp(-pow((h.y - sweepY) * 9.0, 2.0));
+      float swd = (h.y - sweepY) * 9.0;
+      float sw = exp(-swd * swd);
       c = mix(c, mix(acid, vec3(1.0), 0.8), sw * 0.6);
 
       // damage burns toward violet and white
@@ -637,8 +667,10 @@ body {
       if (aKind > 0.5 && aKind < 1.5) c *= 1.15;
 
       // digital rain: impact light pooled on the letter surfaces, strongest on the edges
-      vec3 glint = texture2D(tLight, h.xy / ${SPAN.toFixed(4)} + 0.5).rgb;
-      c += glint * (aKind > 0.5 && aKind < 1.5 ? 1.8 : 0.7) * uRain;
+      if (uRain > 0.0) {
+        vec3 glint = texture2D(tLight, h.xy / ${SPAN.toFixed(4)} + 0.5).rgb;
+        c += glint * (aKind > 0.5 && aKind < 1.5 ? 1.8 : 0.7) * uRain;
+      }
 
       float depth = clamp(1.0 - (-mv.z - uCamDist) * 1.6, 0.25, 1.35);
       vColor = c * depth;
@@ -646,6 +678,7 @@ body {
       // digital rain: the fill dissolves and only a faint outline remains; the rain draws the letters
       // broken-off fragments light up while they fly, so the outline visibly shatters
       vAlpha *= mix(1.0, ((aKind > 0.5 && aKind < 1.5) ? 0.5 : 0.0) + clamp(dmg, 0.0, 1.0) * 0.8, uRain);
+      if (vAlpha < 0.003) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);   // invisible: clip it before it costs fill
       vShape = aRand.w;
       vSeed = aRand.x;
     }
@@ -729,7 +762,8 @@ body {
       float bn = hash21(pcell + pb * 1.37);
       float big = smoothstep(0.6, 1.0, uPulse);
       float ringR = 0.1 + (1.0 - uPulse) * 0.9;
-      float ring = exp(-pow((qd - ringR) * 9.0, 2.0));
+      float rd = (qd - ringR) * 9.0;
+      float ring = exp(-rd * rd);
       float core = smoothstep(0.9, 0.0, qd);
       float pix = step(1.0 - (0.35 + 0.4 * big) * uPulse, bn);
       bg += uPulseCol * uPulse * (core * 0.12 + ring * 0.13) * (0.35 + 1.3 * pix);
@@ -801,7 +835,7 @@ body {
       tPos: { value: null }, tHome: { value: homeTex }, uTime: { value: 0 }, uEnergy: { value: 0 }, uGlitch: { value: 0 },
       uPrimary: { value: PAL.primary }, uHighlight: { value: PAL.highlight }, uSoft: { value: PAL.soft }, uDeep: { value: PAL.deep },
       uCollapse: { value: 0 }, uPR: { value: PR }, uSize: { value: coarse ? 1.25 : 1.15 }, uCamDist: { value: 6 }, uMotion: { value: MOTION },
-      uRain: { value: 0 }, uPulse: { value: 0 }, tLight: { value: null }, uWarp: warpU, uWarpT: warpT, uWarpL: warpL, uWarpC: warpC,
+      uRain: { value: 0 }, uPulse: { value: 0 }, uPulseAmp: { value: coarse ? 1.2 : 2.5 }, tLight: { value: null }, uWarp: warpU, uWarpT: warpT, uWarpL: warpL, uWarpC: warpC,
     },
     transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending,
   });
@@ -814,6 +848,10 @@ body {
   scene.add(sculpture);
   const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
 
+  // the offscreen particle and trail buffers have a pixel budget; only the final pass runs at full
+  // resolution. qScale drops further if the device can't keep up (see the loop).
+  const PIX_BUDGET = coarse ? 1.0e6 : 2.4e6;
+  let qScale = 1, pointPR = PR;
   function resize() {
     const w = innerWidth, h = innerHeight;
     renderer.setSize(w, h, false);
@@ -824,13 +862,22 @@ body {
     camera.updateProjectionMatrix();
     ptMat.uniforms.uCamDist.value = dist;
     const bw = Math.floor(w * PR), bh = Math.floor(h * PR);
-    sceneRT.setSize(bw, bh);
-    trailRT.forEach((rt) => { rt.setSize(bw, bh); renderer.setRenderTarget(rt); renderer.clear(); });
+    const rs = Math.min(1, Math.sqrt(PIX_BUDGET / (bw * bh))) * qScale;
+    const sw = Math.max(1, Math.floor(bw * rs)), sh = Math.max(1, Math.floor(bh * rs));
+    sceneRT.setSize(sw, sh);
+    trailRT.forEach((rt) => { rt.setSize(sw, sh); renderer.setRenderTarget(rt); renderer.clear(); });
     renderer.setRenderTarget(null);
+    pointPR = PR * rs;   // points are sized in buffer pixels, so they keep their on-screen size
+    ptMat.uniforms.uPR.value = pointPR;
     finalMat.uniforms.uAspect.value = w / h;
     finalMat.uniforms.uRes.value.set(bw, bh);
   }
-  addEventListener("resize", resize);
+  let resizeQueued = false;
+  addEventListener("resize", () => {
+    if (resizeQueued) return;
+    resizeQueued = true;
+    requestAnimationFrame(() => { resizeQueued = false; resize(); });
+  });
   resize();
 
   // ---------- digital rain: letter SDF, rain sim, air currents, impact light ----------
@@ -867,6 +914,8 @@ body {
     return sd;
   }
   const sdU = partSdf(unionData);
+  letterData.length = 0;
+  unionData = null;
   const enc = (d) => Math.round((Math.max(-SDF_RANGE, Math.min(SDF_RANGE, d)) / (2 * SDF_RANGE) + 0.5) * 255);
   const sdfBytes = new Uint8Array(SDF_RES * SDF_RES * 4);
   for (let y = 0; y < SDF_RES; y++) for (let x = 0; x < SDF_RES; x++) {
@@ -886,16 +935,19 @@ body {
     uniform float uSlab, uMargin;
     ${WARP_GLSL}
     // the rain sees the letters as one solid slab, so nothing slips between the layers
+    float sdf2(vec2 q) { return texture2D(tSdf, q / ${SPAN.toFixed(4)} + 0.5).a - 0.5; }
     float letterSdf(vec3 p) {
-      float s = texture2D(tSdf, warp(p.xy) / ${SPAN.toFixed(4)} + 0.5).a - 0.5;
-      return boxD(s, abs(p.z) - uSlab) - uMargin;   // keep a band of dead space around the letters
+      return boxD(sdf2(warp(p.xy)), abs(p.z) - uSlab) - uMargin;   // keep a band of dead space around the letters
     }
+    // one warp and five fetches: the depth taps reuse the centre sample since the slab is a straight extrusion
     vec3 letterNormal(vec3 p) {
       vec2 e = vec2(0.012, 0.0);
+      vec2 q = warp(p.xy);
+      float s = sdf2(q), dz = abs(p.z) - uSlab;
       return normalize(vec3(
-        letterSdf(p + e.xyy) - letterSdf(p - e.xyy),
-        letterSdf(p + e.yxy) - letterSdf(p - e.yxy),
-        letterSdf(p + e.yyx) - letterSdf(p - e.yyx)) + vec3(0.0, 1e-5, 0.0));
+        boxD(sdf2(q + e.xy), dz) - boxD(sdf2(q - e.xy), dz),
+        boxD(sdf2(q + e.yx), dz) - boxD(sdf2(q - e.yx), dz),
+        boxD(s, abs(p.z + e.x) - uSlab) - boxD(s, abs(p.z - e.x) - uSlab)) + vec3(0.0, 1e-5, 0.0));
     }
   `;
 
@@ -1036,8 +1088,11 @@ body {
       vec4 V = texture2D(tRVel, aRef);
       float g = V.w;
       gl_Position = vec4(P.xy / ${(SPAN / 2).toFixed(4)}, 0.0, 1.0);
-      gl_PointSize = 3.0 + min(g, 1.5) * 7.0;
-      vC = (aRand.y > 0.6 ? uSoft : uPrimary) * (g * 0.3 + 0.003) * clamp(P.w, 0.0, 1.0);
+      // idle drops splat a single pixel carrying the same light; only real impacts get big soft splats
+      float hitting = step(0.02, g);
+      gl_PointSize = mix(1.0, 3.0 + min(g, 1.5) * 7.0, hitting);
+      vC = (aRand.y > 0.6 ? uSoft : uPrimary) * mix(0.027, g * 0.3 + 0.003, hitting) * clamp(P.w, 0.0, 1.0);
+      if (P.w <= 0.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     }
   `;
   const LIGHT_FRAG = `
@@ -1079,7 +1134,7 @@ body {
       float ton = step(1.0 - uTear * 0.35, wHash(vec2(trow, ttick)));
       gl_Position.x += ton * (wHash(vec2(trow * 1.7, ttick + 3.0)) - 0.5) * 0.4 * uTear * gl_Position.w;
       float big = step(0.985, aRand.w);
-      gl_PointSize = max(1.0, uSize * uGrain * (0.5 + aRand.z * 1.1) * (1.0 + big * 2.5) * uPR * uCamDist / -mv.z);
+      gl_PointSize = min(max(1.0, uSize * uGrain * (0.5 + aRand.z * 1.1) * (1.0 + big * 2.5) * uPR * uCamDist / -mv.z), 10.0 * uPR);
 
       float cp = aRand.y;
       vec3 c = uPrimary;
@@ -1207,7 +1262,22 @@ body {
   lightPts.frustumCulled = false;
   lightScene.add(lightPts);
 
-  let rainSeeded = false, rCur = 0, fCur = 0, lCur = 0;
+  let rainSeeded = false, rCur = 0, fCur = 0, lCur = 0, rainWarm = false;
+  // compile the rain shaders ahead of time (while the visitor is already shaking things up),
+  // so the unlock itself doesn't stutter
+  function warmRain() {
+    if (rainWarm) return;
+    rainWarm = true;
+    pass(rainVelMat, rVelRT[1]);
+    pass(rainPosMat, rPosRT[1]);
+    pass(flowMat, flowRT[1]);
+    pass(fadeMat, lightRT[1]);
+    renderer.compile(lightScene, fsCam);
+    rainPoints.visible = rainLines.visible = true;
+    renderer.compile(scene, camera);
+    rainPoints.visible = rainLines.visible = rainSeeded;
+    renderer.setRenderTarget(null);
+  }
   // every arrival in digital rain rolls its own weather: pace, wind, storminess, density and drop size
   let weather = null;
   function rollWeather() {
@@ -1221,6 +1291,7 @@ body {
   }
   rollWeather();
   function seedRain() {
+    warmRain();
     rollWeather();
     // the flying fragments of the AF become the first drops
     rainVelMat.uniforms.uSeed.value = rainPosMat.uniforms.uSeed.value = 1;
@@ -1474,7 +1545,7 @@ body {
       s.connect(f);
       f.connect(g);
       g.connect(dest || music);
-      s.start(t, R() * 1.5);
+      s.start(t, R() * Math.max(0, noiseBuf.duration - dur - 0.05));
       s.stop(t + dur + 0.05);
     }
     function tone(t, type, freq, peak, attack, release, dest, sweepTo) {
@@ -1642,6 +1713,7 @@ body {
       const t = ctx.currentTime;
       master.gain.cancelScheduledValues(t);
       master.gain.setTargetAtTime(on ? 0.8 : 0, t, on ? 0.4 : 0.08);
+      if (!on) setTimeout(() => { if (!on && ctx.state === "running") ctx.suspend(); }, 400);
       if (on && !timer) { nextT = ctx.currentTime + 0.08; timer = setInterval(schedule, 25); }
       if (!on && timer) { clearInterval(timer); timer = null; }
       return on;
@@ -1666,9 +1738,33 @@ body {
     return { toggle, frame, glitch, pulse, splash };
   })();
 
-  const sndBtn = $("snd");
-  sndBtn.style.color = "#" + PAL.primary.getHexString();
-  sndBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+  const ctlBox = $("ctl"), sndBtn = $("snd"), fsBtn = $("fs");
+  ctlBox.style.color = "#" + PAL.primary.getHexString();
+  ctlBox.addEventListener("pointerdown", (e) => e.stopPropagation());
+
+  // full screen: hidden where the browser can't do it (iPhone Safari, some embeds)
+  const root = document.documentElement;
+  const isFs = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  if (!(document.fullscreenEnabled || document.webkitFullscreenEnabled)) fsBtn.hidden = true;
+  fsBtn.addEventListener("click", () => {
+    try {
+      if (isFs()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      else {
+        const p = (root.requestFullscreen || root.webkitRequestFullscreen).call(root);
+        if (p && p.catch) p.catch(() => { fsBtn.hidden = true; });
+      }
+    } catch (e) {
+      fsBtn.hidden = true;
+    }
+  });
+  const syncFs = () => {
+    const on = isFs();
+    fsBtn.setAttribute("aria-pressed", String(on));
+    fsBtn.setAttribute("aria-label", on ? "Exit full screen" : "Full screen");
+  };
+  document.addEventListener("fullscreenchange", syncFs);
+  document.addEventListener("webkitfullscreenchange", syncFs);
+
   sndBtn.addEventListener("click", async () => {
     try {
       const on = await Sound.toggle();
@@ -1786,6 +1882,7 @@ body {
       if (shake > 0.02) st.unlock += shake * dt;
       else st.unlock = Math.max(0, st.unlock - dt * 1.5);
       if (st.unlock > UNLOCK * 0.6) st.energy = Math.min(1.4, st.energy + dt * 0.5);
+      if (!rainWarm && st.unlock > UNLOCK * 0.25) warmRain();
       if (st.unlock >= UNLOCK) { st.mode = "transition"; st.modeT = 0; }
     } else {
       // chaos peaks, momentum drains, gravity pulls the fragments down, the letters rebuild, rain takes over
@@ -1852,11 +1949,11 @@ body {
     pt.uRain.value = rm;
     pt.uPulse.value = st.pulse;
     const tu = trailMat.uniforms;
-    tu.uTime.value = t; tu.uEnergy.value = st.energy;
+    tu.uTime.value = t % 600; tu.uEnergy.value = st.energy;
     tu.uDecay.value = Math.max(0.3 * rm, Math.min(0.95, 0.35 + Math.min(st.energy, 1) * 0.5 + st.glitch * 0.1 + st.collapse * 0.1));
     tu.uDrift.value.set(st.velScreen.x * dt * 0.25 * st.hover * (1 - rm), st.velScreen.y * dt * 0.25 * st.hover * (1 - rm) + 0.0008 * st.energy);
     const fu = finalMat.uniforms;
-    fu.uTime.value = t; fu.uEnergy.value = st.energy; fu.uGlitch.value = st.glitch; fu.uSpeed.value = st.speed;
+    fu.uTime.value = t % 600; fu.uEnergy.value = st.energy; fu.uGlitch.value = st.glitch; fu.uSpeed.value = st.speed;
     fu.uCollapse.value = st.collapse; fu.uHover.value = st.hover * (1 - 0.35 * rm);
     // digital rain glitches too: block tears, colour split and pixel shifts grow with rain energy
     if (rm > 0) fu.uEnergy.value = Math.max(st.energy, (0.25 + st.rainE * 0.7) * rm);
@@ -1889,7 +1986,7 @@ body {
     const localTarget = rm * (Math.min(st.speed, 3) * 1.0 * st.hover + st.press * 1.8 + st.clickBoom * 1.5);
     warpL.value += (localTarget - warpL.value) * Math.min(1, dt * 5);
     warpC.value.set(hit.x, hit.y, 0);
-    warpT.value = t;
+    warpT.value = t % 600;
     st.pulse *= Math.exp(-dt * 3.2);
     fu.uPulse.value = st.pulse;
 
@@ -1931,17 +2028,40 @@ body {
       rainUniforms.uCamDist.value = ptMat.uniforms.uCamDist.value;
       rainUniforms.uCamLocal.value.copy(camera.position).applyMatrix4(inv);
       rainUniforms.uTear.value = (st.glitch * 0.9 + st.rainE * 0.25) * MOTION;
-      rainUniforms.uTearT.value = t;
+      rainUniforms.uTearT.value = t % 600;
+      rainUniforms.uPR.value = pointPR;
+      rainGeo.setDrawRange(0, Math.floor(RN / Math.max(1, st.shapeSize * st.shapeSize * 0.5)));
     }
     Sound.frame(st);
   }
 
   // ---------- loop ----------
   let cur = 0, tCur = 0, first = true, last = performance.now() / 1000, t0 = last;
+  let perfAcc = 0, perfN = 0, perfT = last, lastRaf = last, rafEma = 1 / 60, skipOdd = false;
+  canvas.addEventListener("webglcontextrestored", () => { first = true; resize(); });
   function frame() {
     const nowS = performance.now() / 1000;
-    const dt = Math.min(1 / 30, Math.max(1 / 240, nowS - last));
+    // on 90 Hz+ screens draw every other refresh (about 60 fps); wait out a lost GPU context
+    const iv = nowS - lastRaf;
+    lastRaf = nowS;
+    if (iv > 0 && iv < 0.1) rafEma += (iv - rafEma) * 0.05;
+    if (rafEma < 1 / 90) skipOdd = !skipOdd;
+    else skipOdd = false;
+    if (skipOdd || glc.isContextLost()) { requestAnimationFrame(frame); return; }
+    const raw = nowS - last;
+    const dt = Math.min(1 / 30, Math.max(1 / 240, raw));
     last = nowS;
+
+    // adaptive quality: if frames run slow for a couple of seconds, shrink the offscreen buffers
+    if (nowS - t0 > 4 && raw < 0.25) {
+      perfAcc += raw;
+      perfN++;
+      if (nowS - perfT > 2) {
+        if (perfAcc / perfN > 0.024 && qScale > 0.5) { qScale = Math.max(0.5, qScale * 0.8); resize(); }
+        perfAcc = perfN = 0;
+        perfT = nowS;
+      }
+    }
     const t = nowS - t0;
     update(dt, t);
 
