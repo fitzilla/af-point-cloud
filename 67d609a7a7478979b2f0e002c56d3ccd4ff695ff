@@ -1,0 +1,19 @@
+index.html
+  s_2e47aa980f998f::t_c866bb550deac7 68-91,101-109,704-995,1062-1066,1112
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "67d609a7a7478979b2f0e002c56d3ccd4ff695ff",
+  "prompts": {},
+  "sessions": {
+    "s_2e47aa980f998f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b3c7448d-e150-4670-85f4-faba3ba61633",
+        "model": "unknown"
+      },
+      "human_author": "Aaron Fitzsimmons <afitzsimmons@stora.co>"
+    }
+  }
+}
