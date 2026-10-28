@@ -11,20 +11,20 @@
 
   gtag('config', 'G-CJQW5NNR9T');
 </script>
-<title>AF</title>
+<title>AARON</title>
 <meta name="description" content="aaronfitzsimmons.com">
 <link rel="canonical" href="https://aaronfitzsimmons.com/">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://aaronfitzsimmons.com/">
 <meta property="og:site_name" content="Aaron Fitzsimmons">
-<meta property="og:title" content="AF">
+<meta property="og:title" content="AARON">
 <meta property="og:description" content="aaronfitzsimmons.com">
 <meta property="og:image" content="https://aaronfitzsimmons.com/og.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="The letters AF built from glowing green particles on a dark background.">
+<meta property="og:image:alt" content="The word AARON built from glowing green particles on a dark background.">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="AF">
+<meta name="twitter:title" content="AARON">
 <meta name="twitter:description" content="aaronfitzsimmons.com">
 <meta name="twitter:image" content="https://aaronfitzsimmons.com/og.jpg">
 <meta name="theme-color" content="#020604">
@@ -180,10 +180,8 @@ body {
 
   // ---------- palette: a fresh hue pair on every load ----------
   // Keeps the relationships of the original acid green / lavender scheme, rotated round the wheel.
-  const hue = Math.random() * 360;
-  const off = 150 + Math.random() * 50;
   const hsl = (h, s, l) => new THREE.Color().setHSL((((h % 360) + 360) % 360) / 360, s, l);
-  const PAL = {
+  const makePalette = (hue, off) => ({
     primary: hsl(hue, 1, 0.6),
     highlight: hsl(hue - 26, 1, 0.62),
     soft: hsl(hue + off, 1, 0.81),
@@ -191,53 +189,93 @@ body {
     bgNear: hsl(hue + 35, 0.54, 0.059),
     bgFar: hsl(hue + 45, 0.43, 0.014),
     bloom: hsl(hue + off - 4, 0.68, 0.048),
-  };
+  });
+  let hue = Math.random() * 360;
+  const PAL = makePalette(hue, 150 + Math.random() * 50);   // shader uniforms hold these exact objects
+  let palTarget = null;
+  function newPalette() {
+    hue = (hue + 70 + Math.random() * 220) % 360;
+    palTarget = makePalette(hue, 150 + Math.random() * 50);
+  }
+  function stepPalette(dt) {
+    if (!palTarget) return;
+    const k = Math.min(1, dt * 1.1);
+    let done = true;
+    for (const key in PAL) {
+      PAL[key].lerpHSL(palTarget[key], k);
+      if (Math.abs(PAL[key].r - palTarget[key].r) + Math.abs(PAL[key].g - palTarget[key].g) + Math.abs(PAL[key].b - palTarget[key].b) > 0.004) done = false;
+    }
+    if (done) { for (const key in PAL) PAL[key].copy(palTarget[key]); palTarget = null; }
+    canvas.style.background = "#" + PAL.bgFar.getHexString();
+    sndBtn.style.color = "#" + PAL.primary.getHexString();
+  }
   canvas.style.background = "#" + PAL.bgFar.getHexString();
 
-  // ---------- monogram target cloud ----------
-  // A and F share a foot and one bar: the A's crossbar runs on to become the F's middle arm.
-  const T = 0.36;            // stroke weight, world units
-  const S = 512;             // raster resolution for sampling
-  const SPAN = 2.7;          // world units across the raster
-  const toPx = (x, y) => [(x / SPAN + 0.5) * S, (0.5 - y / SPAN) * S];
+  // ---------- wordmark target cloud ----------
+  // AARON in bold geometric capitals, spaced wide; each letter is its own extruded slab.
+  const T = 0.2;             // stroke weight, world units
+  const HT = 0.5;            // half the cap height
+  const S = 1024;            // raster resolution for sampling
+  const SPAN = 6.4;          // world units across the raster
 
   function raster(draw) {
     const c = document.createElement("canvas");
     c.width = c.height = S;
     const g = c.getContext("2d");
+    g.setTransform(S / SPAN, 0, 0, -S / SPAN, S / 2, S / 2);   // draw in world units, y up
     g.fillStyle = g.strokeStyle = "#fff";
-    g.lineWidth = (T / SPAN) * S;
+    g.lineWidth = T;
     g.lineCap = "butt";
     g.lineJoin = "miter";
     g.miterLimit = 20;
-    const [cx0, cy0] = toPx(-2, 1);
-    const [cx1, cy1] = toPx(2, -1);
     g.beginPath();
-    g.rect(cx0, cy0, cx1 - cx0, cy1 - cy0);
+    g.rect(-SPAN / 2, -HT, SPAN, HT * 2);
     g.clip();
     draw(g);
     return g.getImageData(0, 0, S, S).data;
   }
-  const rect = (g, x0, y0, x1, y1) => {
-    const [a, b] = toPx(x0, y1), [c, d] = toPx(x1, y0);
-    g.fillRect(a, b, c - a, d - b);
-  };
-  const ext3 = (p, q, k) => { const dx = q[0] - p[0], dy = q[1] - p[1], l = Math.hypot(dx, dy); return [q[0] + dx / l * k, q[1] + dy / l * k]; };
+  const poly = (g, pts) => { g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); pts.slice(1).forEach((p) => g.lineTo(p[0], p[1])); g.stroke(); };
+  const extend = (p, q, k) => { const dx = q[0] - p[0], dy = q[1] - p[1], l = Math.hypot(dx, dy); return [q[0] + dx / l * k, q[1] + dy / l * k]; };
 
-  const apex = [-0.32, 1.0], footL = [-1.14, -1.0], footR = [0.4, -1.0];
-  const aData = raster((g) => {
-    const l = ext3(apex, footL, 0.4), r = ext3(apex, footR, 0.4);
-    g.beginPath();
-    g.moveTo(...toPx(l[0], l[1]));
-    g.lineTo(...toPx(apex[0], apex[1]));
-    g.lineTo(...toPx(r[0], r[1]));
-    g.stroke();
+  const GLYPH = {
+    A: { w: 0.88, draw(g, x, w) {
+      const apex = [x + w / 2, HT];
+      poly(g, [extend(apex, [x + T * 0.55, -HT], 0.3), apex, extend(apex, [x + w - T * 0.55, -HT], 0.3)]);
+      g.fillRect(x + w * 0.2, -0.17 - T / 2, w * 0.6, T);
+    } },
+    R: { w: 0.74, draw(g, x, w) {
+      g.fillRect(x, -HT, T, HT * 2);
+      const yTop = HT - T / 2, yMid = 0.04, rr = (yTop - yMid) / 2, cy = yMid + rr, cx = x + w - T / 2 - rr;
+      const bowl = [[x + T / 2, yTop]];
+      for (let i = 0; i <= 24; i++) { const a = Math.PI / 2 - (i / 24) * Math.PI; bowl.push([cx + rr * Math.cos(a), cy + rr * Math.sin(a)]); }
+      bowl.push([x + T / 2, yMid]);
+      poly(g, bowl);
+      poly(g, [[x + w * 0.42, yMid], extend([x + w * 0.42, yMid], [x + w - T * 0.5, -HT], 0.3)]);
+    } },
+    O: { w: 0.86, draw(g, x, w) {
+      const cx = x + w / 2, rx = w / 2 - T / 2, ry = HT - T / 2, ring = [];
+      for (let i = 0; i <= 64; i++) { const a = (i / 64) * Math.PI * 2; ring.push([cx + rx * Math.cos(a), ry * Math.sin(a)]); }
+      g.lineJoin = "round";
+      poly(g, ring);
+    } },
+    N: { w: 0.78, draw(g, x, w) {
+      g.fillRect(x, -HT, T, HT * 2);
+      g.fillRect(x + w - T, -HT, T, HT * 2);
+      const a = [x + T / 2, HT], b = [x + w - T / 2, -HT];
+      poly(g, [extend(b, a, 0.3), extend(a, b, 0.3)]);
+    } },
+  };
+  const WORD = "AARON", GAP = 0.16;
+  const wordW = [...WORD].reduce((s, ch) => s + GLYPH[ch].w, 0) + GAP * (WORD.length - 1);
+  const letterData = [];
+  let penX = -wordW / 2;
+  [...WORD].forEach((ch) => {
+    const x = penX, w = GLYPH[ch].w;
+    letterData.push(raster((g) => GLYPH[ch].draw(g, x, w)));
+    penX += w + GAP;
   });
-  const fData = raster((g) => {
-    rect(g, 0.42 - T / 2, -1.2, 0.42 + T / 2, 1.0);
-    rect(g, 0.42 - T / 2, 1.0 - T, 1.24, 1.0);
-  });
-  const barData = raster((g) => rect(g, -0.84, -0.3 - T / 2, 1.04, -0.3 + T / 2));
+  const unionData = new Uint8ClampedArray(S * S * 4);
+  letterData.forEach((d) => { for (let i = 3; i < d.length; i += 4) unionData[i] = Math.max(unionData[i], d[i]); });
 
   function collect(data) {
     const inner = [], edge = [];
@@ -249,11 +287,8 @@ body {
     }
     return { inner: Int32Array.from(inner), edge: Int32Array.from(edge) };
   }
-  const parts = [
-    { px: collect(aData), zc: -0.14, d: 0.12 },
-    { px: collect(fData), zc: 0.14, d: 0.12 },
-    { px: collect(barData), zc: 0.0, d: 0.25 },
-  ];
+  // letters sit on slightly staggered depths so the word reads as a sculpture when it tilts
+  const parts = letterData.map((d, i) => ({ px: collect(d), zc: i % 2 ? 0.05 : -0.05, d: 0.12 }));
   parts.forEach((p) => (p.area = (p.px.inner.length + p.px.edge.length) / 2));
   const totalArea = parts.reduce((s, p) => s + p.area, 0);
 
@@ -325,7 +360,7 @@ body {
       x += dx / l * k; y += dy / l * k; z += dz / l * k;
       kind = 2;
     } else if (r < 0.05) {
-      x = (Math.random() - 0.5) * 4.6; y = (Math.random() - 0.5) * 3.2; z = (Math.random() - 0.5) * 1.8;
+      x = (Math.random() - 0.5) * 7.6; y = (Math.random() - 0.5) * 2.6; z = (Math.random() - 0.5) * 1.8;
       kind = 2;
     } else {
       [x, y, z, kind] = surfacePoint();
@@ -399,12 +434,36 @@ body {
       return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
     }
   `;
+  // digital rain letter distortion, shared by the rain (as a cut-out) and the outline (as particles).
+  // Not a global wobble: a few patches tear on their own, and the cursor rips the letters near it.
+  const WARP_GLSL = `
+    uniform float uWarp, uWarpT, uWarpL;
+    uniform vec3 uWarpC;
+    float wHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float wNoise(vec2 p) {
+      vec2 i = floor(p), f = fract(p);
+      f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(wHash(i), wHash(i + vec2(1.0, 0.0)), f.x), mix(wHash(i + vec2(0.0, 1.0)), wHash(i + vec2(1.0, 1.0)), f.x), f.y);
+    }
+    vec2 warpOffset(vec2 q) {
+      float patchy = smoothstep(0.62, 0.88, wNoise(q * 1.3 + vec2(uWarpT * 0.15, 3.1))) * uWarp;
+      vec2 dc = q - uWarpC.xy;
+      float local = exp(-dot(dc, dc) / 0.22) * uWarpL;
+      float tick = floor(uWarpT * 7.0), slice = floor(q.y * 16.0);
+      vec2 tear = vec2(wHash(vec2(slice, tick)) - 0.5, (wHash(vec2(slice + 7.0, tick)) - 0.5) * 0.3);
+      vec2 shove = dc / (length(dc) + 0.15) * 0.35;
+      vec2 ripple = vec2(sin(q.y * 9.0 + uWarpT * 4.0), cos(q.x * 8.0 + uWarpT * 3.5)) * 0.5;
+      return (tear * 0.16 + ripple * 0.04) * (patchy + local) - shove * local * 0.12;
+    }
+    vec2 warp(vec2 q) { return q + warpOffset(q); }
+  `;
   const FS_VERT = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
 
   // ---------- GPU simulation: velocity pass (w = accumulated damage) ----------
   const VEL_FRAG = `
     uniform sampler2D tPos; uniform sampler2D tVel; uniform sampler2D tHome;
     uniform float uTime, uDt, uEnergy, uCollapse, uGlitch, uInit, uHover, uSpeed, uRadius, uMotion;
+    uniform float uGravity, uDampBoost, uStill, uKick;
     uniform vec3 uRayO, uRayD, uMouseVel;
     varying vec2 vUv;
     ${HASH}
@@ -432,11 +491,11 @@ body {
 
       // home spring, loosened by global instability and local damage
       float loosen = clamp(inst * 0.55 + dmg * 0.45, 0.0, 0.97);
-      float k = mix(10.0, 0.5, loosen) * (0.55 + r * 0.9) * (1.0 - 0.985 * uCollapse);
+      float k = mix(10.0, 0.5, loosen) * (0.55 + r * 0.9) * (1.0 - 0.985 * uCollapse) * (1.0 - 0.92 * uGravity);
       vec3 acc = (h - p) * k;
 
       // turbulence: idle shimmer up to full abstraction
-      acc += n * ((0.25 + inst * 2.4 + dmg * 1.4 + uGlitch * 1.5) * uMotion + uCollapse * 10.0);
+      acc += n * ((0.25 + inst * 2.4 + dmg * 1.4 + uGlitch * 1.5) * uMotion * (1.0 - uStill) + uCollapse * 10.0);
 
       // local field near the pointer: a noise partition decides repel, attract or swirl
       float mode = snoise(h * 2.2 + vec3(uTime * 0.2));
@@ -454,9 +513,16 @@ body {
 
       // collapse: radial dispersal into abstraction
       acc += normalize(p + rnd * 0.6 + vec3(1e-4)) * uCollapse * 2.5 * (0.2 + r);
+      acc.x += sign(p.x + rnd.x) * uCollapse * 4.5 * (0.3 + r);   // fling wide, out to the sides
+
+      // beat: a small bounce outward and up, which the home spring pulls back
+      v += (normalize(h + rnd * 0.4 + vec3(1e-4)) * 0.3 + vec3(0.0, 0.35, 0.0)) * uKick * (0.4 + r);
+
+      // digital rain transition: gravity drags the cloud down while it loses momentum
+      acc.y -= uGravity * 5.0;
 
       v += acc * uDt;
-      v *= exp(-mix(5.0, 1.0, clamp(inst * 0.45 + uCollapse, 0.0, 1.0)) * uDt);
+      v *= exp(-(mix(5.0, 1.0, clamp(inst * 0.45 + uCollapse, 0.0, 1.0)) + uDampBoost * 4.0) * uDt);
       float sp = length(v);
       if (sp > 9.0) v *= 9.0 / sp;
 
@@ -491,7 +557,7 @@ body {
       float q = 0.05 + 0.1 * hash11(slice + 0.5);
       p = mix(p, floor(p / q + 0.5) * q, on * 0.5);
       float l = length(p);
-      if (l > 7.0) p *= 7.0 / l;
+      if (l > 10.0) p *= 10.0 / l;
       gl_FragColor = vec4(p, V.w);
     }
   `;
@@ -501,6 +567,8 @@ body {
     attribute vec2 aRef; attribute vec4 aRand; attribute float aKind;
     uniform sampler2D tPos; uniform sampler2D tHome;
     uniform float uTime, uEnergy, uGlitch, uCollapse, uPR, uSize, uCamDist, uMotion;
+    uniform float uRain; uniform sampler2D tLight;
+    ${WARP_GLSL}
     uniform vec3 uPrimary, uHighlight, uSoft, uDeep;
     varying vec3 vColor; varying float vAlpha; varying float vShape; varying float vSeed;
     ${HASH}
@@ -513,8 +581,10 @@ body {
       // unstable returns: a few points jump every frame
       float fl = step(0.992 - uEnergy * 0.03 - uGlitch * 0.05, hash21(vec2(aRand.x * 311.0, tq)));
       p += (vec3(hash21(vec2(aRand.x, tq)), hash21(vec2(aRand.y, tq)), hash21(vec2(aRand.z, tq))) - 0.5)
-           * fl * (0.04 + uEnergy * 0.25) * uMotion;
-      p.xy += (vec2(hash21(vec2(aRand.w, tq + 1.0)), hash21(vec2(aRand.x, tq + 2.0))) - 0.5) * 0.004 * uMotion;
+           * fl * (0.04 + uEnergy * 0.25) * uMotion * (1.0 - uRain);
+      p.xy += (vec2(hash21(vec2(aRand.w, tq + 1.0)), hash21(vec2(aRand.x, tq + 2.0))) - 0.5) * 0.004 * uMotion * (1.0 - uRain);
+      // digital rain: the outline tears with the same distortion the rain sees (inverse, so they line up)
+      p.xy -= warpOffset(h.xy) * uRain;
 
       vec4 mv = modelViewMatrix * vec4(p, 1.0);
       vec4 clip = projectionMatrix * mv;
@@ -556,9 +626,15 @@ body {
       c = mix(c, mix(vio, vec3(1.0), step(0.75, aRand.x)), clamp(dmg, 0.0, 1.0) * 0.75);
       if (aKind > 0.5 && aKind < 1.5) c *= 1.15;
 
+      // digital rain: impact light pooled on the letter surfaces, strongest on the edges
+      vec3 glint = texture2D(tLight, h.xy / ${SPAN.toFixed(4)} + 0.5).rgb;
+      c += glint * (aKind > 0.5 && aKind < 1.5 ? 1.8 : 0.7) * uRain;
+
       float depth = clamp(1.0 - (-mv.z - uCamDist) * 1.6, 0.25, 1.35);
       vColor = c * depth;
       vAlpha = (aKind > 1.5 ? 0.28 : 0.4) * (0.6 + 0.4 * aRand.z) * (1.0 + sw * 0.8);
+      // digital rain: the fill dissolves and only a faint outline remains; the rain draws the letters
+      vAlpha *= mix(1.0, (aKind > 0.5 && aKind < 1.5) ? 0.5 : 0.0, uRain);
       vShape = aRand.w;
       vSeed = aRand.x;
     }
@@ -596,7 +672,8 @@ body {
     uniform sampler2D tTrail;
     uniform float uTime, uEnergy, uGlitch, uSpeed, uCollapse, uHover, uAspect, uMotion;
     uniform vec2 uMouse, uSplitDir, uRes;
-    uniform vec3 uBgNear, uBgFar, uBloom;
+    uniform vec3 uBgNear, uBgFar, uBloom, uPulseCol;
+    uniform float uPulse;
     varying vec2 vUv;
     ${HASH}
     void main(){
@@ -633,6 +710,19 @@ body {
       float vg = length(cuv);
       vec3 bg = mix(uBgNear, uBgFar, smoothstep(0.05, 0.9, vg));
       bg += uBloom * smoothstep(0.7, 0.0, vg) * (0.4 + 0.6 * clamp(uEnergy, 0.0, 1.0));
+      // beat pulse: a blocky, glitchy burst of pixels from behind and a broken ring that expands as it fades
+      float pb = floor(uTime * 12.0);
+      float px = 0.012 + 0.03 * hash21(vec2(pb, 5.0));
+      vec2 pcell = floor(cuv / px);
+      float qd = length(pcell * px);
+      float bn = hash21(pcell + pb * 1.37);
+      float big = smoothstep(0.6, 1.0, uPulse);
+      float ringR = 0.1 + (1.0 - uPulse) * 0.9;
+      float ring = exp(-pow((qd - ringR) * 9.0, 2.0));
+      float core = smoothstep(0.9, 0.0, qd);
+      float pix = step(1.0 - (0.35 + 0.4 * big) * uPulse, bn);
+      bg += uPulseCol * uPulse * (core * 0.12 + ring * 0.13) * (0.35 + 1.3 * pix);
+      bg += mix(uPulseCol, vec3(1.0), 0.5) * step(0.985 - big * uPulse * 0.05, bn) * big * uPulse * 0.55 * smoothstep(1.4, 0.2, qd);
       vec3 o = bg + col;
       o *= 0.94 + 0.06 * sin(gl_FragCoord.y * 1.5708 + uTime * 6.0);
       o += (hash21(gl_FragCoord.xy + fract(uTime) * 517.0) - 0.5) * 0.045;
@@ -662,11 +752,14 @@ body {
   let sceneRT = makeRT(1, 1, fxType, THREE.LinearFilter);
   let trailRT = [makeRT(1, 1, fxType, THREE.LinearFilter), makeRT(1, 1, fxType, THREE.LinearFilter)];
 
+  const warpU = { value: 0 }, warpT = { value: 0 }, warpL = { value: 0 }, warpC = { value: new THREE.Vector3(99, 99, 0) };
+  const MARGIN = 0.1;
   const V3 = () => new THREE.Vector3();
   const velMat = fsMat(VEL_FRAG, {
     tPos: { value: null }, tVel: { value: null }, tHome: { value: homeTex },
     uTime: { value: 0 }, uDt: { value: 0.016 }, uEnergy: { value: 0 }, uCollapse: { value: 0 }, uGlitch: { value: 0 },
-    uInit: { value: 1 }, uHover: { value: 0 }, uSpeed: { value: 0 }, uRadius: { value: 0.34 }, uMotion: { value: MOTION },
+    uInit: { value: 1 }, uHover: { value: 0 }, uSpeed: { value: 0 }, uRadius: { value: 0.3 }, uMotion: { value: MOTION },
+    uGravity: { value: 0 }, uDampBoost: { value: 0 }, uStill: { value: 0 }, uKick: { value: 0 },
     uRayO: { value: V3() }, uRayD: { value: new THREE.Vector3(0, 0, -1) }, uMouseVel: { value: V3() },
   });
   const posMat = fsMat(POS_FRAG, {
@@ -681,6 +774,7 @@ body {
     tTrail: { value: null }, uTime: { value: 0 }, uEnergy: { value: 0 }, uGlitch: { value: 0 }, uSpeed: { value: 0 },
     uCollapse: { value: 0 }, uHover: { value: 0 }, uAspect: { value: 1 }, uMotion: { value: MOTION },
     uBgNear: { value: PAL.bgNear }, uBgFar: { value: PAL.bgFar }, uBloom: { value: PAL.bloom },
+    uPulse: { value: 0 }, uPulseCol: { value: PAL.primary.clone() },
     uMouse: { value: new THREE.Vector2(-9, -9) }, uSplitDir: { value: new THREE.Vector2(1, 0) }, uRes: { value: new THREE.Vector2(1, 1) },
   });
 
@@ -695,6 +789,7 @@ body {
       tPos: { value: null }, tHome: { value: homeTex }, uTime: { value: 0 }, uEnergy: { value: 0 }, uGlitch: { value: 0 },
       uPrimary: { value: PAL.primary }, uHighlight: { value: PAL.highlight }, uSoft: { value: PAL.soft }, uDeep: { value: PAL.deep },
       uCollapse: { value: 0 }, uPR: { value: PR }, uSize: { value: coarse ? 1.25 : 1.15 }, uCamDist: { value: 6 }, uMotion: { value: MOTION },
+      uRain: { value: 0 }, tLight: { value: null }, uWarp: warpU, uWarpT: warpT, uWarpL: warpL, uWarpC: warpC,
     },
     transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending,
   });
@@ -712,7 +807,7 @@ body {
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     const tf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-    const dist = Math.max(1.7 / tf, 1.55 / (tf * camera.aspect));
+    const dist = Math.max(1.05 / tf, (wordW / 2 + 0.45) / (tf * camera.aspect));
     camera.position.set(0, 0, dist);
     camera.updateProjectionMatrix();
     ptMat.uniforms.uCamDist.value = dist;
@@ -725,6 +820,411 @@ body {
   }
   addEventListener("resize", resize);
   resize();
+
+  // ---------- digital rain: letter SDF, rain sim, air currents, impact light ----------
+  // Signed distance to each letter part, built from the same rasters the cloud was sampled from.
+  const SDF_RES = 512, SDF_RANGE = 0.5;
+  function edt(grid, n) {
+    const f = new Float64Array(n), v = new Int32Array(n), z = new Float64Array(n + 1);
+    const line = (get, set) => {
+      for (let q = 0; q < n; q++) f[q] = get(q);
+      let k = 0;
+      v[0] = 0; z[0] = -1e20; z[1] = 1e20;
+      for (let q = 1; q < n; q++) {
+        let s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+        while (s <= z[k]) { k--; s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]); }
+        k++; v[k] = q; z[k] = s; z[k + 1] = 1e20;
+      }
+      k = 0;
+      for (let q = 0; q < n; q++) { while (z[k + 1] < q) k++; set(q, (q - v[k]) * (q - v[k]) + f[v[k]]); }
+    };
+    for (let x = 0; x < n; x++) line((q) => grid[q * n + x], (q, val) => { grid[q * n + x] = val; });
+    for (let y = 0; y < n; y++) line((q) => grid[y * n + q], (q, val) => { grid[y * n + q] = val; });
+  }
+  function partSdf(data) {
+    const n = SDF_RES, step = S / n, out = new Float64Array(n * n), inn = new Float64Array(n * n);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      const inside = data[(y * step * S + x * step) * 4 + 3] >= 128;
+      out[y * n + x] = inside ? 0 : 1e20;
+      inn[y * n + x] = inside ? 1e20 : 0;
+    }
+    edt(out, n);
+    edt(inn, n);
+    const sd = new Float32Array(n * n), unit = SPAN / n;
+    for (let i = 0; i < n * n; i++) sd[i] = (Math.sqrt(out[i]) - Math.sqrt(inn[i])) * unit;
+    return sd;
+  }
+  const sdU = partSdf(unionData);
+  const enc = (d) => Math.round((Math.max(-SDF_RANGE, Math.min(SDF_RANGE, d)) / (2 * SDF_RANGE) + 0.5) * 255);
+  const sdfBytes = new Uint8Array(SDF_RES * SDF_RES * 4);
+  for (let y = 0; y < SDF_RES; y++) for (let x = 0; x < SDF_RES; x++) {
+    const e = enc(sdU[y * SDF_RES + x]), dst = ((SDF_RES - 1 - y) * SDF_RES + x) * 4;
+    sdfBytes[dst] = sdfBytes[dst + 1] = sdfBytes[dst + 2] = sdfBytes[dst + 3] = e;
+  }
+  const sdfTex = new THREE.DataTexture(sdfBytes, SDF_RES, SDF_RES, THREE.RGBAFormat, THREE.UnsignedByteType);
+  sdfTex.minFilter = sdfTex.magFilter = THREE.LinearFilter;
+  sdfTex.needsUpdate = true;
+  const partZ = new THREE.Vector3(parts[0].zc, parts[1].zc, parts[2].zc);
+  const partD = new THREE.Vector3(parts[0].d, parts[1].d, parts[2].d);
+
+  const SDF_GLSL = `
+    uniform sampler2D tSdf;
+    uniform vec3 uPartZ, uPartD;
+    float boxD(float d2, float dz) { vec2 w = vec2(d2, dz); return min(max(w.x, w.y), 0.0) + length(max(w, 0.0)); }
+    uniform float uSlab, uMargin;
+    ${WARP_GLSL}
+    // the rain sees the letters as one solid slab, so nothing slips between the layers
+    float letterSdf(vec3 p) {
+      float s = texture2D(tSdf, warp(p.xy) / ${SPAN.toFixed(4)} + 0.5).a - 0.5;
+      return boxD(s, abs(p.z) - uSlab) - uMargin;   // keep a band of dead space around the letters
+    }
+    vec3 letterNormal(vec3 p) {
+      vec2 e = vec2(0.012, 0.0);
+      return normalize(vec3(
+        letterSdf(p + e.xyy) - letterSdf(p - e.xyy),
+        letterSdf(p + e.yxy) - letterSdf(p - e.yxy),
+        letterSdf(p + e.yyx) - letterSdf(p - e.yyx)) + vec3(0.0, 1e-5, 0.0));
+    }
+  `;
+
+  // rain velocity: gravity, air drag toward the current, cursor currents, bounces off the letters (w = impact glow)
+  const RAIN_VEL_FRAG = `
+    uniform sampler2D tRPos; uniform sampler2D tRVel; uniform sampler2D tFlow; uniform sampler2D tSeedVel;
+    uniform float uTime, uDt, uSeed, uHover, uPress, uSpeed, uRadius, uWind, uChaos, uKick, uBurst;
+    uniform vec3 uRayO, uRayD;
+    uniform vec2 uFlowMin, uFlowSize;
+    varying vec2 vUv;
+    ${HASH}
+    ${NOISE}
+    ${SDF_GLSL}
+    void main(){
+      if (uSeed > 0.5) { gl_FragColor = vec4(texture2D(tSeedVel, vUv).xyz * 0.35, 0.0); return; }
+      vec4 P = texture2D(tRPos, vUv);
+      vec4 V = texture2D(tRVel, vUv);
+      vec3 p = P.xyz; vec3 v = V.xyz; float glow = V.w;
+      float r = hash21(vUv * 311.7 + 0.37);
+      float r2 = hash21(vUv * 157.1 + 3.1);
+
+      vec2 flow = texture2D(tFlow, (p.xy - uFlowMin) / uFlowSize).xy;
+      float gust = 0.7 + 0.6 * (0.5 + 0.5 * snoise(vec3(p.x * 0.4, p.z * 0.4, uTime * 0.1)));
+      float term = mix(0.7, 2.6, r) * gust;
+      if (P.w > 1.5) { gl_FragColor = vec4(flow.x * 0.5, -term, 0.0, 0.0); return; }
+
+      // fall: gravity plus drag toward the moving air
+      v.y -= 2.5 * uDt;
+      v += (vec3(flow + vec2(uWind, 0.0), 0.0) + vec3(0.0, -term, 0.0) - v) * min(1.0, mix(2.6, 1.0, r) * uDt);
+      // beat: drops hop up and scatter a little, then fall again
+      v += vec3((r2 - 0.5) * 0.8, 1.0 + r, 0.0) * uKick;
+      // weather: turbulence that comes and goes
+      v.xy += vec2(snoise(p * 1.3 + vec3(0.0, 0.0, uTime * 0.5)), snoise(p * 1.3 + vec3(17.0, 0.0, uTime * 0.5))) * uChaos * uDt * 4.0;
+
+      // hovering slows nearby drops into a gentle orbit; pressing pulls them into a stronger swirl
+      vec3 op = p - uRayO;
+      vec3 dv = op - uRayD * dot(op, uRayD);
+      float d = length(dv);
+      vec3 dir = d > 1e-4 ? dv / d : vec3(1.0, 0.0, 0.0);
+      vec3 tang = cross(uRayD, dir);
+      float fh = smoothstep(uRadius, 0.0, d) * uHover * (1.0 - smoothstep(0.4, 1.6, uSpeed));
+      v = mix(v, v * 0.3 + tang * 0.7 + dir * 0.15, fh * min(1.0, uDt * 4.0));
+      float fp = smoothstep(uRadius * 2.6, 0.0, d) * uPress;
+      v += (tang * 6.0 - dir * 10.0) * fp * uDt;
+      // moving through the rain parts it: a wake that scales with pointer speed
+      float fw = smoothstep(uRadius * 1.4, 0.0, d) * uHover * min(uSpeed, 4.0);
+      v += (dir * 3.0 + tang * 1.2) * fw * uDt * 4.0;
+      // click: a splash that throws nearby drops outward
+      float fb = smoothstep(uRadius * 3.0, 0.0, d) * uBurst;
+      v += (dir * 6.0 + tang * 2.0 + vec3(0.0, 1.5, 0.0)) * fb * (0.5 + r);
+
+      // collide with the letters: bounce, ricochet, slide
+      float rad = 0.01 + r * 0.012;
+      vec3 pn = p + v * uDt;
+      float sd = letterSdf(pn);
+      if (sd < rad) {
+        vec3 n = letterNormal(pn);
+        float vn = dot(v, n);
+        if (vn < 0.0) {
+          float rest = mix(0.18, 0.6, r2) * mix(1.3, 0.7, r);
+          vec3 vt = v - vn * n;
+          vt.x += (hash21(vUv + fract(uTime)) - 0.5) * 0.5 * abs(vn);
+          v = vt * mix(0.95, 0.7, r2) - vn * rest * n;
+          glow = min(2.0, glow + (-vn) * 0.5);
+        }
+      }
+      glow *= exp(-uDt * 4.0);
+      float sp = length(v);
+      if (sp > 10.0) v *= 10.0 / sp;
+      gl_FragColor = vec4(v, glow);
+    }
+  `;
+
+  // rain position: integrate, stay outside the letters, wear out after bounces, respawn above (w = life)
+  const RAIN_POS_FRAG = `
+    uniform sampler2D tRPos; uniform sampler2D tRVel; uniform sampler2D tSeedPos;
+    uniform float uTime, uDt, uSeed, uTop, uBottom, uHalfW, uDensity;
+    varying vec2 vUv;
+    ${HASH}
+    ${NOISE}
+    ${SDF_GLSL}
+    void main(){
+      if (uSeed > 0.5) { gl_FragColor = vec4(texture2D(tSeedPos, vUv).xyz, 1.0); return; }
+      vec4 P = texture2D(tRPos, vUv);
+      vec4 V = texture2D(tRVel, vUv);
+      float r = hash21(vUv * 311.7 + 0.37);
+      float life = P.w > 1.5 ? 1.0 : P.w;
+      vec3 p = P.xyz + V.xyz * uDt;
+      float rad = 0.01 + r * 0.012;
+      float sd = letterSdf(p);
+      if (sd < rad) {
+        p += letterNormal(p) * (rad - sd);
+        life -= uDt * (r < 0.4 ? 1.1 : 0.35);
+      }
+      if (length(V.xyz) < 0.25) life -= uDt * 0.8;
+      if (life <= 0.0 || p.y < -uBottom || abs(p.x) > uHalfW * 1.5) {
+        vec2 s = vUv * 1000.0 + fract(uTime * 0.0137) * 917.0;
+        float x = (hash21(s) * 2.0 - 1.0) * uHalfW * 1.15;
+        float dens = 0.5 + 0.5 * snoise(vec3(x * 0.55, uTime * 0.06, 3.7));
+        float delay = hash21(s + 7.3) * 2.0 + (hash21(s + 2.9) > uDensity * (0.55 + 0.45 * dens) ? 7.0 : 0.0);
+        // most drops fall through the letters' depth so they get blocked; a few fall behind or in front
+        float zr = hash21(s + 4.1);
+        float z = zr < 0.72 ? mix(-uSlab, uSlab, zr / 0.72)
+                : (zr < 0.9 ? -uSlab - (zr - 0.72) / 0.18 * 0.8 : uSlab + (zr - 0.9) / 0.1 * 0.7);
+        p = vec3(x, uTop + delay, z);
+        life = 2.0;
+      }
+      gl_FragColor = vec4(p, life);
+    }
+  `;
+
+  // air currents: self-advecting velocity field the cursor stirs; swipes leave trails, circles leave vortices
+  const FLOW_FRAG = `
+    uniform sampler2D tFlow;
+    uniform float uDt, uSplat, uFlowR;
+    uniform vec2 uFlowMin, uFlowSize, uCursor, uCursorVel;
+    varying vec2 vUv;
+    void main(){
+      vec2 wp = uFlowMin + vUv * uFlowSize;
+      vec2 vel = texture2D(tFlow, vUv).xy;
+      vec2 f = texture2D(tFlow, vUv - vel * uDt / uFlowSize).xy * exp(-uDt * 0.8);
+      vec2 dc = wp - uCursor;
+      f += uCursorVel * exp(-dot(dc, dc) / (uFlowR * uFlowR)) * uSplat * min(1.0, uDt * 8.0);
+      float l = length(f);
+      if (l > 9.0) f *= 9.0 / l;
+      gl_FragColor = vec4(f, 0.0, 1.0);
+    }
+  `;
+
+  // impact light: drops splat glow into a map of the letter plane that the AF samples
+  const LIGHT_VERT = `
+    attribute vec2 aRef; attribute vec4 aRand;
+    uniform sampler2D tRPos; uniform sampler2D tRVel;
+    uniform vec3 uPrimary, uSoft;
+    varying vec3 vC;
+    void main(){
+      vec4 P = texture2D(tRPos, aRef);
+      vec4 V = texture2D(tRVel, aRef);
+      float g = V.w;
+      gl_Position = vec4(P.xy / ${(SPAN / 2).toFixed(4)}, 0.0, 1.0);
+      gl_PointSize = 3.0 + min(g, 1.5) * 7.0;
+      vC = (aRand.y > 0.6 ? uSoft : uPrimary) * (g * 0.3 + 0.003) * clamp(P.w, 0.0, 1.0);
+    }
+  `;
+  const LIGHT_FRAG = `
+    varying vec3 vC;
+    void main(){
+      float a = smoothstep(0.5, 0.0, length(gl_PointCoord - 0.5));
+      gl_FragColor = vec4(vC * a, 1.0);
+    }
+  `;
+  const FADE_FRAG = `
+    uniform sampler2D tPrev; uniform float uDecay;
+    varying vec2 vUv;
+    void main(){ gl_FragColor = vec4(texture2D(tPrev, vUv).rgb * uDecay, 1.0); }
+  `;
+
+  // rain drawing: dots, broken pixels and streaks; drops behind a letter are mostly hidden by it
+  const RAIN_VERT = `
+    attribute vec2 aRef; attribute vec4 aRand; attribute float aEnd;
+    uniform sampler2D tRPos; uniform sampler2D tRVel;
+    uniform float uPR, uCamDist, uAlpha, uSize, uGrain;
+    uniform vec3 uCamLocal;
+    uniform vec3 uPrimary, uHighlight, uSoft, uDeep;
+    varying vec3 vColor; varying float vAlpha; varying float vShape; varying float vSeed;
+    ${SDF_GLSL}
+    void main(){
+      vec4 P = texture2D(tRPos, aRef);
+      vec4 V = texture2D(tRVel, aRef);
+      vec3 p = P.xyz - V.xyz * aEnd * (0.02 + aRand.z * 0.03) * uGrain;
+      vec4 mv = modelViewMatrix * vec4(p, 1.0);
+      gl_Position = projectionMatrix * mv;
+      float big = step(0.985, aRand.w);
+      gl_PointSize = max(1.0, uSize * uGrain * (0.5 + aRand.z * 1.1) * (1.0 + big * 2.5) * uPR * uCamDist / -mv.z);
+
+      float cp = aRand.y;
+      vec3 c = uPrimary;
+      if (cp > 0.5) c = uHighlight;
+      if (cp > 0.62) c = uSoft;
+      if (cp > 0.8) c = uDeep;
+      if (cp > 0.96) c = vec3(1.0);
+      c = mix(c, vec3(1.0), clamp(V.w, 0.0, 1.0) * 0.6);
+
+      // drops behind the (invisible) letters are hidden; drops in front pass over faintly
+      vec3 toCam = uCamLocal - P.xyz;
+      float occ = 0.0;
+      if (P.z < -uSlab && toCam.z > 0.0) {
+        vec3 q = P.xyz + toCam * (-P.z / toCam.z);
+        occ = smoothstep(0.01, -0.02, texture2D(tSdf, warp(q.xy) / ${SPAN.toFixed(4)} + 0.5).a - 0.5 - uMargin);
+      }
+      float front = smoothstep(uSlab, uSlab + 0.25, P.z);
+      vColor = c;
+      vAlpha = uAlpha * clamp(P.w, 0.0, 1.0) * (0.32 + aRand.x * 0.4) * mix(1.0, 0.04, occ) * mix(1.0, 0.3, front) * (1.0 - aEnd * 0.85);
+      vShape = aRand.w;
+      vSeed = aRand.x;
+    }
+  `;
+  const LINE_FRAG = `
+    varying vec3 vColor; varying float vAlpha; varying float vShape; varying float vSeed;
+    void main(){ gl_FragColor = vec4(vColor * vAlpha, 1.0); }
+  `;
+
+  const RS = coarse ? 136 : 224, RN = RS * RS;
+  const SLAB = 0.3;
+  const flowType = isGL2 ? THREE.HalfFloatType : simType;
+  const rPosRT = [makeRT(RS, RS, simType, THREE.NearestFilter), makeRT(RS, RS, simType, THREE.NearestFilter)];
+  const rVelRT = [makeRT(RS, RS, simType, THREE.NearestFilter), makeRT(RS, RS, simType, THREE.NearestFilter)];
+  const flowRT = [makeRT(128, 96, flowType, THREE.LinearFilter), makeRT(128, 96, flowType, THREE.LinearFilter)];
+  const lightRT = [makeRT(320, 320, fxType, THREE.LinearFilter), makeRT(320, 320, fxType, THREE.LinearFilter)];
+  [...flowRT, ...lightRT].forEach((rt) => { renderer.setRenderTarget(rt); renderer.clear(); });
+  renderer.setRenderTarget(null);
+
+  const flowMin = new THREE.Vector2(-4, -3), flowSize = new THREE.Vector2(8, 6);
+  const rainVelMat = fsMat(RAIN_VEL_FRAG, {
+    tRPos: { value: null }, tRVel: { value: null }, tFlow: { value: null }, tSeedVel: { value: null }, tSdf: { value: sdfTex },
+    uTime: { value: 0 }, uDt: { value: 0.016 }, uSeed: { value: 0 }, uHover: { value: 0 }, uPress: { value: 0 }, uSpeed: { value: 0 },
+    uRadius: { value: 0.65 }, uWind: { value: 0 }, uChaos: { value: 0 }, uKick: { value: 0 }, uBurst: { value: 0 }, uSlab: { value: SLAB }, uMargin: { value: MARGIN }, uWarp: warpU, uWarpT: warpT, uWarpL: warpL, uWarpC: warpC, uRayO: { value: velMat.uniforms.uRayO.value }, uRayD: { value: velMat.uniforms.uRayD.value },
+    uFlowMin: { value: flowMin }, uFlowSize: { value: flowSize }, uPartZ: { value: partZ }, uPartD: { value: partD },
+  });
+  const rainPosMat = fsMat(RAIN_POS_FRAG, {
+    tRPos: { value: null }, tRVel: { value: null }, tSeedPos: { value: null }, tSdf: { value: sdfTex },
+    uTime: { value: 0 }, uDt: { value: 0.016 }, uSeed: { value: 0 }, uTop: { value: 2.4 }, uBottom: { value: 2.6 }, uHalfW: { value: 3 }, uDensity: { value: 1 }, uSlab: { value: SLAB }, uMargin: { value: MARGIN }, uWarp: warpU, uWarpT: warpT, uWarpL: warpL, uWarpC: warpC,
+    uPartZ: { value: partZ }, uPartD: { value: partD },
+  });
+  const flowMat = fsMat(FLOW_FRAG, {
+    tFlow: { value: null }, uDt: { value: 0.016 }, uSplat: { value: 0 }, uFlowR: { value: 0.6 },
+    uFlowMin: { value: flowMin }, uFlowSize: { value: flowSize }, uCursor: { value: new THREE.Vector2(99, 99) }, uCursorVel: { value: new THREE.Vector2() },
+  });
+  const fadeMat = fsMat(FADE_FRAG, { tPrev: { value: null }, uDecay: { value: 0.92 } });
+
+  const rRef = new Float32Array(RN * 2), rRand = new Float32Array(RN * 4);
+  for (let i = 0; i < RN; i++) {
+    rRef[i * 2] = ((i % RS) + 0.5) / RS;
+    rRef[i * 2 + 1] = (Math.floor(i / RS) + 0.5) / RS;
+    for (let k = 0; k < 4; k++) rRand[i * 4 + k] = Math.random();
+  }
+  const rainGeo = new THREE.BufferGeometry();
+  rainGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(RN * 3), 3));
+  rainGeo.setAttribute("aRef", new THREE.BufferAttribute(rRef, 2));
+  rainGeo.setAttribute("aRand", new THREE.BufferAttribute(rRand, 4));
+  rainGeo.setAttribute("aEnd", new THREE.BufferAttribute(new Float32Array(RN), 1));
+
+  // a few drops also draw as short streaks; the rest stay as dots
+  const streaks = [];
+  for (let i = 0; i < RN; i++) if (rRand[i * 4 + 3] > 0.93 && rRand[i * 4 + 3] <= 0.985) streaks.push(i);
+  const SN = streaks.length;
+  const lRef = new Float32Array(SN * 4), lRand = new Float32Array(SN * 8), lEnd = new Float32Array(SN * 2);
+  streaks.forEach((i, j) => {
+    for (let e = 0; e < 2; e++) {
+      lRef[(j * 2 + e) * 2] = rRef[i * 2];
+      lRef[(j * 2 + e) * 2 + 1] = rRef[i * 2 + 1];
+      for (let k = 0; k < 4; k++) lRand[(j * 2 + e) * 4 + k] = rRand[i * 4 + k];
+      lEnd[j * 2 + e] = e;
+    }
+  });
+  const lineGeo = new THREE.BufferGeometry();
+  lineGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(SN * 6), 3));
+  lineGeo.setAttribute("aRef", new THREE.BufferAttribute(lRef, 2));
+  lineGeo.setAttribute("aRand", new THREE.BufferAttribute(lRand, 4));
+  lineGeo.setAttribute("aEnd", new THREE.BufferAttribute(lEnd, 1));
+
+  const rainUniforms = {
+    tRPos: { value: null }, tRVel: { value: null }, tSdf: { value: sdfTex }, uPartZ: { value: partZ }, uPartD: { value: partD },
+    uPR: { value: PR }, uCamDist: { value: 6 }, uAlpha: { value: 0 }, uSize: { value: coarse ? 1.3 : 1.2 }, uGrain: { value: 1 }, uSlab: { value: SLAB }, uMargin: { value: MARGIN }, uWarp: warpU, uWarpT: warpT, uWarpL: warpL, uWarpC: warpC, uCamLocal: { value: V3() },
+    uPrimary: { value: PAL.primary }, uHighlight: { value: PAL.highlight }, uSoft: { value: PAL.soft }, uDeep: { value: PAL.deep },
+  };
+  const rainMatOpts = { uniforms: rainUniforms, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending };
+  const rainPoints = new THREE.Points(rainGeo, new THREE.ShaderMaterial({ vertexShader: RAIN_VERT, fragmentShader: PT_FRAG, ...rainMatOpts }));
+  const rainLines = new THREE.LineSegments(lineGeo, new THREE.ShaderMaterial({ vertexShader: RAIN_VERT, fragmentShader: LINE_FRAG, ...rainMatOpts }));
+  [rainPoints, rainLines].forEach((o) => { o.frustumCulled = false; o.visible = false; sculpture.add(o); });
+
+  const lightMat = new THREE.ShaderMaterial({
+    vertexShader: LIGHT_VERT, fragmentShader: LIGHT_FRAG,
+    uniforms: { tRPos: { value: null }, tRVel: { value: null }, uPrimary: { value: PAL.primary }, uSoft: { value: PAL.soft } },
+    transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+  const lightScene = new THREE.Scene();
+  const lightPts = new THREE.Points(rainGeo, lightMat);
+  lightPts.frustumCulled = false;
+  lightScene.add(lightPts);
+
+  let rainSeeded = false, rCur = 0, fCur = 0, lCur = 0;
+  // every arrival in digital rain rolls its own weather: pace, wind, storminess, density and drop size
+  let weather = null;
+  function rollWeather() {
+    const R = Math.random;
+    weather = {
+      seed: R() * 1000, pace: 0.6 + R() * 1.4,
+      wind: (R() - 0.5) * 1.6, gust: 0.8 + R() * 2.2,
+      chaos: R() * 0.6, storm: 0.6 + R() * 2.4,
+      dens: 0.4 + R() * 0.4, grain: 0.45 + R() * 0.5, grainAmp: 0.4 + R() * 1.2,
+    };
+  }
+  rollWeather();
+  function seedRain() {
+    rollWeather();
+    // the flying fragments of the AF become the first drops
+    rainVelMat.uniforms.uSeed.value = rainPosMat.uniforms.uSeed.value = 1;
+    rainVelMat.uniforms.tSeedVel.value = velRT[cur].texture;
+    rainPosMat.uniforms.tSeedPos.value = posRT[cur].texture;
+    pass(rainVelMat, rVelRT[0]);
+    pass(rainPosMat, rPosRT[0]);
+    rainVelMat.uniforms.uSeed.value = rainPosMat.uniforms.uSeed.value = 0;
+    rCur = 0;
+    rainSeeded = true;
+    rainPoints.visible = rainLines.visible = true;
+  }
+  function stepRain(dt) {
+    const fn = 1 - fCur;
+    flowMat.uniforms.uDt.value = dt;
+    flowMat.uniforms.tFlow.value = flowRT[fCur].texture;
+    pass(flowMat, flowRT[fn]);
+    fCur = fn;
+
+    const rn = 1 - rCur;
+    rainVelMat.uniforms.uDt.value = rainPosMat.uniforms.uDt.value = dt;
+    rainVelMat.uniforms.tRPos.value = rPosRT[rCur].texture;
+    rainVelMat.uniforms.tRVel.value = rVelRT[rCur].texture;
+    rainVelMat.uniforms.tFlow.value = flowRT[fCur].texture;
+    pass(rainVelMat, rVelRT[rn]);
+    rainPosMat.uniforms.tRPos.value = rPosRT[rCur].texture;
+    rainPosMat.uniforms.tRVel.value = rVelRT[rn].texture;
+    pass(rainPosMat, rPosRT[rn]);
+    rCur = rn;
+
+    const ln = 1 - lCur;
+    fadeMat.uniforms.uDecay.value = Math.exp(-dt * 5);
+    fadeMat.uniforms.tPrev.value = lightRT[lCur].texture;
+    pass(fadeMat, lightRT[ln]);
+    lightMat.uniforms.tRPos.value = rPosRT[rCur].texture;
+    lightMat.uniforms.tRVel.value = rVelRT[rCur].texture;
+    renderer.autoClear = false;
+    renderer.setRenderTarget(lightRT[ln]);
+    renderer.render(lightScene, fsCam);
+    renderer.autoClear = true;
+    lCur = ln;
+
+    rainUniforms.tRPos.value = rPosRT[rCur].texture;
+    rainUniforms.tRVel.value = rVelRT[rCur].texture;
+    ptMat.uniforms.tLight.value = lightRT[lCur].texture;
+  }
 
   // ---------- sound: generative lo-fi plus interaction foley ----------
   // Everything is synthesised with Web Audio; the song is rolled fresh on each load.
@@ -740,19 +1240,49 @@ body {
       maj9: [0, 4, 7, 11, 14], m9: [0, 3, 7, 10, 14], dom13: [0, 4, 10, 14, 21],
       m7: [0, 3, 7, 10], dom9: [0, 4, 10, 14], m11: [0, 3, 10, 14, 17],
     };
-    const prog = pick([
+    const PROGS = [
       [[2, "m9"], [7, "dom13"], [0, "maj9"], [9, "m9"]],   // ii V I vi
       [[0, "maj9"], [9, "m9"], [2, "m9"], [7, "dom9"]],    // I vi ii V
       [[9, "m9"], [5, "maj9"], [0, "maj9"], [7, "dom13"]], // vi IV I V
       [[0, "m9"], [5, "m11"], [3, "maj9"], [7, "dom9"]],   // i iv bIII V
       [[5, "maj9"], [4, "m7"], [2, "m9"], [0, "maj9"]],    // IV iii ii I
-    ]);
-    const kickPat = pick([[0, 10], [0, 7, 10], [0, 3, 10], [0, 8, 11]]);
-    const hatDiv = pick([2, 2, 1]);
+    ];
+    const KICKS = [[0, 10], [0, 7, 10], [0, 3, 10], [0, 8, 11], [0, 6, 10, 13]];
+    let prog = pick(PROGS);
+    let kickPat = pick(KICKS);
+    let hatDiv = pick([2, 2, 1]);
+    let keyShift = 0, melodyRate = 0.14, stabRate = 0.35, breakUntil = 0;
+
+    // every 8 bars the arrangement drifts: new changes, key moves, grooves, breakdowns
+    function mutate(bar) {
+      if (R() < 0.35) prog = pick(PROGS);
+      if (R() < 0.2) keyShift = pick([-5, -2, 0, 0, 3, 5]);
+      if (R() < 0.5) kickPat = pick(KICKS);
+      if (R() < 0.35) hatDiv = pick([1, 2, 2, 4]);
+      melodyRate = 0.05 + R() * 0.25;
+      stabRate = R() * 0.6;
+      if (R() < 0.2) breakUntil = bar + 4;
+    }
+
+    // big beats every couple of bars drive the visual pulse
+    const pulses = [];
+    let vBar = -1;
+    function pulse() {
+      if (on && ctx) {
+        let k = 0;
+        while (pulses.length && pulses[0].t <= ctx.currentTime) k = Math.max(k, pulses.shift().k);
+        return k;
+      }
+      pulses.length = 0;
+      const bar = Math.floor(performance.now() / 1000 / ((60 / bpm) * 4));
+      if (bar === vBar) return 0;
+      vBar = bar;
+      return bar % 2 ? 0 : (bar % 8 === 0 ? 1 : bar % 4 === 0 ? 0.75 : 0.5);
+    }
 
     let ctx = null, on = false, timer = null, step = 0, nextT = 0;
     let master, music, crush, musicLP, wobble, wobbleLFO, wobbleDepth, sfx, hissBP, hissGain, noiseBuf;
-    let crushLevel = -1, lastBlast = 0, inCollapse = false;
+    let crushLevel = -1, lastBlast = 0, inCollapse = false, arrived = false, rainBed;
 
     function crushCurve(a) {
       const n = 2048, c = new Float32Array(n), steps = Math.round(64 - a * 58);
@@ -841,6 +1371,22 @@ body {
       hissBP.connect(hissGain);
       hissGain.connect(sfx);
       hs.start();
+
+      // digital rain: a soft, band-limited rain bed
+      const rs = ctx.createBufferSource(), rlo = ctx.createBiquadFilter(), rhi = ctx.createBiquadFilter();
+      rs.buffer = noiseBuf;
+      rs.loop = true;
+      rlo.type = "lowpass";
+      rlo.frequency.value = 2800;
+      rhi.type = "highpass";
+      rhi.frequency.value = 450;
+      rainBed = ctx.createGain();
+      rainBed.gain.value = 0;
+      rs.connect(rlo);
+      rlo.connect(rhi);
+      rhi.connect(rainBed);
+      rainBed.connect(master);
+      rs.start(0, 0.7);
     }
 
     // ---- instruments ----
@@ -911,17 +1457,29 @@ body {
       o.stop(t + dur + 0.1);
     }
 
+    function boom(t, k) {
+      tone(t, "sine", 58, 0.32 * k, 0.01, 1.4, music, 40);
+      noiseHit(t, 0.9, "lowpass", 600, 0.5, 0.08 * k);
+    }
+
     // ---- sequencer ----
     function play(n, t) {
       const bar = Math.floor(n / 16), s = n % 16;
+      if (s === 0 && bar > 0 && bar % 8 === 0) mutate(bar);
       const [deg, q] = prog[bar % prog.length];
       const tones = CH[q];
-      let base = root + deg;
+      let base = root + keyShift + deg;
       while (base > 57) base -= 12;
       const barDur = (60 / bpm) * 4;
 
+      if (s === 0 && bar >= 2 && bar % 2 === 0) {
+        const k = bar % 8 === 0 ? 1 : bar % 4 === 0 ? 0.75 : 0.5;
+        pulses.push({ t, k });
+        boom(t, k);
+      }
+
       const fill = bar % 8 === 7 && s >= 12;
-      if (bar >= 2 && !(fill && R() < 0.5)) {
+      if (bar >= 2 && bar >= breakUntil && !(fill && R() < 0.5)) {
         if (kickPat.includes(s)) kick(t, 0.85 + R() * 0.15);
         else if (s === 14 && R() < 0.2) kick(t, 0.5);
         if (s === 4 || s === 12) snare(t, 0.8 + R() * 0.2);
@@ -929,12 +1487,12 @@ body {
         if (s % hatDiv === 0) hat(t, (s % 4 === 0 ? 0.9 : 0.55) * (0.7 + R() * 0.3));
       }
       if (s === 0) tones.forEach((iv, i) => keys(t + i * 0.012, base + 12 + iv, barDur * 0.95, 0.9));
-      if (s === 6 && R() < 0.35) tones.slice(1).forEach((iv, i) => keys(t + i * 0.01, base + 12 + iv, barDur * 0.4, 0.5));
+      if (s === 6 && R() < stabRate) tones.slice(1).forEach((iv, i) => keys(t + i * 0.01, base + 12 + iv, barDur * 0.4, 0.5));
       if (bar >= 1) {
         if (s === 0) bass(t, base - 12, barDur * 0.45, 1);
         if (s === 10 && R() < 0.6) bass(t, base - 12 + (R() < 0.5 ? 7 : 12), barDur * 0.2, 0.7);
       }
-      if (bar >= 4 && s % 2 === 0 && R() < 0.14) keys(t, base + 24 + pick(tones.slice(0, 4)), 0.7, 0.55);
+      if (bar >= 4 && s % 2 === 0 && R() < melodyRate) keys(t, base + 24 + pick(tones.slice(0, 4)), 0.7, 0.55);
     }
     function schedule() {
       const sd = 60 / bpm / 4;
@@ -965,7 +1523,7 @@ body {
     }
     function rebuild(t) {
       const [deg, q] = prog[Math.floor(step / 16) % prog.length];
-      let base = root + deg;
+      let base = root + keyShift + deg;
       while (base > 57) base -= 12;
       CH[q].forEach((iv, i) => tone(t + i * 0.07, "sine", mtof(base + 24 + iv), 0.06, 0.01, 0.9, sfx));
     }
@@ -974,14 +1532,17 @@ body {
       const t = ctx.currentTime;
       const s = Math.min(st.speed, 5) * st.hover;
       const e = Math.min(1, st.energy + st.collapse);
-      hissGain.gain.setTargetAtTime(Math.min(0.22, s * 0.06) + st.glitch * 0.04, t, 0.05);
-      hissBP.frequency.setTargetAtTime(500 + s * 1400 + st.energy * 1200, t, 0.05);
+      const rain = st.rainMix;
+      hissGain.gain.setTargetAtTime((Math.min(0.22, s * 0.06) + st.glitch * 0.04) * (1 - 0.6 * rain), t, 0.05);
+      hissBP.frequency.setTargetAtTime((500 + s * 1400 + st.energy * 1200) * (1 - rain) + (250 + s * 500) * rain, t, 0.05);
+      rainBed.gain.setTargetAtTime(0.05 * st.rainAlpha, t, 0.4);
+      if (rain > 0.9 && !arrived) { arrived = true; rebuild(t); }
       musicLP.frequency.setTargetAtTime(2600 * (1 - 0.6 * e) * (1 - 0.8 * st.collapse) + 200, t, 0.15);
       wobbleDepth.gain.setTargetAtTime(0.0012 + e * 0.004 + st.collapse * 0.006, t, 0.2);
       wobbleLFO.frequency.setTargetAtTime(0.55 + e * 3.5, t, 0.3);
       const cl = Math.round(e * 10) / 10;
       if (cl !== crushLevel) { crushLevel = cl; crush.curve = crushCurve(cl); }
-      if (s > 2.5 && t - lastBlast > 0.18) { lastBlast = t; thump(t, Math.min(1, s / 5)); }
+      if (s > 2.5 && rain < 0.5 && t - lastBlast > 0.18) { lastBlast = t; thump(t, Math.min(1, s / 5)); }
       if (st.collapse > 0.6 && !inCollapse) { inCollapse = true; collapse(t); }
       if (inCollapse && st.collapse < 0.3) { inCollapse = false; rebuild(t); }
     }
@@ -1002,7 +1563,7 @@ body {
       if (document.hidden) ctx.suspend();
       else if (on) ctx.resume();
     });
-    return { toggle, frame, glitch };
+    return { toggle, frame, glitch, pulse };
   })();
 
   const sndBtn = $("snd");
@@ -1019,12 +1580,17 @@ body {
   });
 
   // ---------- interaction state ----------
-  const pointer = { ndc: new THREE.Vector2(9, 9), inside: false, lx: 0, ly: 0, lt: 0 };
+  const pointer = { ndc: new THREE.Vector2(9, 9), inside: false, down: false, lx: 0, ly: 0, lt: 0 };
   const st = {
     hover: 0, speed: 0, speedTarget: 0, energy: 0, collapse: 0, collapseHold: 0, glitch: 0, lastMove: -10,
     velScreen: new THREE.Vector2(), velScreenTarget: new THREE.Vector2(), splitDir: new THREE.Vector2(1, 0),
     velWorld: new THREE.Vector3(), lastHit: null, parX: 0, parY: 0,
+    // digital rain: hidden unlock progress, direction reversals, mode timeline
+    unlock: 0, rev: 0, lvx: 0, lvy: 0, pulse: 0, peak: 0, rainE: 0, burst: 0, rainRecoloured: false, mode: "af", modeT: 0, rainMix: 0, rainAlpha: 0, gravity: 0, damp: 0, press: 0,
   };
+  const UNLOCK = 9;
+  const REST = { x: 0.1, y: -0.12 };
+  const smooth = (a, b, x) => { const k = Math.min(1, Math.max(0, (x - a) / (b - a))); return k * k * (3 - 2 * k); };
 
   function onMove(e) {
     const now = performance.now() / 1000;
@@ -1036,15 +1602,26 @@ body {
       const vx = (x - pointer.lx) / m / dt, vy = -(y - pointer.ly) / m / dt;
       st.velScreenTarget.set(vx, vy);
       st.speedTarget = Math.max(st.speedTarget * 0.5, Math.hypot(vx, vy));
+      // count sharp direction reversals: shaking, not sweeping
+      const len = Math.hypot(vx, vy);
+      if (len > 0.8) {
+        if (st.lvx * vx + st.lvy * vy < -0.3 * len * Math.hypot(st.lvx, st.lvy)) st.rev += 1;
+        st.lvx = vx; st.lvy = vy;
+      }
     }
     pointer.inside = true;
     pointer.lx = x; pointer.ly = y; pointer.lt = now;
     st.lastMove = now;
   }
-  function onLeave() { pointer.inside = false; pointer.lt = 0; st.lastHit = null; }
+  function onLeave() { pointer.inside = false; pointer.down = false; pointer.lt = 0; st.lastHit = null; }
   addEventListener("pointermove", onMove, { passive: true });
-  addEventListener("pointerdown", (e) => { pointer.lt = 0; onMove(e); }, { passive: true });
-  addEventListener("pointerup", (e) => { if (e.pointerType !== "mouse") onLeave(); });
+  addEventListener("pointerdown", (e) => {
+    pointer.lt = 0;
+    pointer.down = e.pointerType === "mouse";
+    if (st.mode === "rain") { st.burst = 1; st.rainE = Math.min(1.5, st.rainE + 0.15); }   // a click splashes the rain outward
+    onMove(e);
+  }, { passive: true });
+  addEventListener("pointerup", (e) => { pointer.down = false; if (e.pointerType !== "mouse") onLeave(); });
   addEventListener("pointercancel", onLeave);
   document.addEventListener("pointerleave", onLeave);
   addEventListener("blur", onLeave);
@@ -1083,7 +1660,7 @@ body {
     st.collapse += (ct - st.collapse) * Math.min(1, dt * (ct > st.collapse ? 3 : 2.2));
 
     // glitch pulses: rare at rest, frequent under pressure, lingering after
-    const rate = (0.12 + st.energy * 1.2 + Math.min(st.speed, 4) * 0.4 * st.hover) * (reduced ? 0.4 : 1);
+    const rate = (0.12 + st.energy * 1.2 + Math.min(st.speed, 4) * 0.4 * st.hover) * (reduced ? 0.4 : 1) * (st.mode === "rain" ? 0 : 1);
     if (Math.random() < rate * dt) {
       const g = 0.3 + Math.random() * 0.7;
       if (g > st.glitch) Sound.glitch(g);
@@ -1091,14 +1668,45 @@ body {
     }
     st.glitch *= Math.exp(-dt * 7);
 
-    // slow sway plus pointer parallax
+    // digital rain unlock: sustained violent shaking fills a hidden reservoir; pauses drain it slowly
+    st.rev *= Math.exp(-dt);
+    if (st.mode === "af") {
+      const shake = Math.max(0, Math.min(1.2, (st.speed - 1.2) / 2)) * (0.35 + 0.65 * Math.min(1, st.rev / 4)) * st.hover;
+      if (shake > 0.02) st.unlock += shake * dt;
+      else st.unlock = Math.max(0, st.unlock - dt * 1.5);
+      if (st.unlock > UNLOCK * 0.6) st.energy = Math.min(1.4, st.energy + dt * 0.5);
+      if (st.unlock >= UNLOCK) { st.mode = "transition"; st.modeT = 0; }
+    } else {
+      // chaos peaks, momentum drains, gravity pulls the fragments down, the letters rebuild, rain takes over
+      st.modeT += dt;
+      const T = st.modeT, tr = st.mode === "transition";
+      const chaos = tr ? 1 - smooth(1.1, 2.6, T) : 0;
+      st.energy = 1.4 * chaos;
+      st.collapse = chaos;
+      st.collapseHold = 0;
+      st.glitch *= chaos;
+      st.gravity = tr ? smooth(1.0, 1.9, T) * (1 - smooth(3.0, 4.3, T)) : 0;
+      st.damp = tr ? smooth(1.4, 2.6, T) * (1 - smooth(4.6, 6.2, T)) : 0;
+      st.rainMix = tr ? smooth(3.0, 6.8, T) : 1;
+      st.rainAlpha = tr ? smooth(1.5, 3.4, T) : 1;
+      if (tr && !rainSeeded && T > 1.5) seedRain();
+      if (tr && T > 7.2) st.mode = "rain";
+    }
+    st.press += ((pointer.down ? 1 : 0) - st.press) * Math.min(1, dt * 6);
+    const rm = st.rainMix;
+
+    // slow sway plus pointer parallax; in digital rain the AF settles into a fixed, still pose
     const tx = pointer.inside ? pointer.ndc.x : 0, ty = pointer.inside ? pointer.ndc.y : 0;
     st.parX += (tx - st.parX) * Math.min(1, dt * 1.5);
     st.parY += (ty - st.parY) * Math.min(1, dt * 1.5);
     const sway = reduced ? 0.4 : 1;
-    sculpture.rotation.y = Math.sin(t * 0.21) * 0.1 * sway + st.parX * 0.45;
-    sculpture.rotation.x = Math.sin(t * 0.13) * 0.04 * sway - st.parY * 0.25;
-    sculpture.rotation.z = Math.sin(t * 0.09) * 0.012 * sway;
+    // in digital rain the camera drifts on its own, swinging the angle the rain falls at
+    const ry = REST.y + (Math.sin(t * 0.13) * 0.16 + Math.sin(t * 0.051 + 1.7) * 0.08) * sway;
+    const rx = REST.x + Math.sin(t * 0.09 + 0.6) * 0.12 * sway;
+    const rz = (Math.sin(t * 0.07) * 0.22 + Math.sin(t * 0.031 + 2.3) * 0.1) * sway;
+    sculpture.rotation.y = (Math.sin(t * 0.21) * 0.06 * sway + st.parX * 0.28) * (1 - rm) + ry * rm;
+    sculpture.rotation.x = (Math.sin(t * 0.13) * 0.04 * sway - st.parY * 0.25) * (1 - rm) + rx * rm;
+    sculpture.rotation.z = Math.sin(t * 0.09) * 0.012 * sway * (1 - rm) + rz * rm;
     sculpture.updateMatrixWorld();
 
     // pointer ray into object space
@@ -1119,21 +1727,85 @@ body {
 
     const vu = velMat.uniforms;
     vu.uTime.value = t; vu.uDt.value = dt; vu.uEnergy.value = st.energy; vu.uCollapse.value = st.collapse;
-    vu.uGlitch.value = st.glitch; vu.uHover.value = st.hover; vu.uSpeed.value = st.speed;
+    // in digital rain the cursor only nudges the outline gently
+    vu.uGlitch.value = st.glitch; vu.uHover.value = st.hover * (1 - 0.3 * rm); vu.uSpeed.value = st.speed * (1 - 0.6 * rm);
     vu.uMouseVel.value.copy(st.velWorld);
+    vu.uGravity.value = st.gravity; vu.uDampBoost.value = st.damp; vu.uStill.value = rm;
     const pu = posMat.uniforms;
     pu.uTime.value = t; pu.uDt.value = dt; pu.uGlitch.value = st.glitch; pu.uEnergy.value = st.energy;
     const pt = ptMat.uniforms;
     pt.uTime.value = t; pt.uEnergy.value = st.energy; pt.uGlitch.value = st.glitch; pt.uCollapse.value = st.collapse;
+    pt.uRain.value = rm;
     const tu = trailMat.uniforms;
     tu.uTime.value = t; tu.uEnergy.value = st.energy;
-    tu.uDecay.value = Math.min(0.95, 0.35 + Math.min(st.energy, 1) * 0.5 + st.glitch * 0.1 + st.collapse * 0.1);
-    tu.uDrift.value.set(st.velScreen.x * dt * 0.25 * st.hover, st.velScreen.y * dt * 0.25 * st.hover + 0.0008 * st.energy);
+    tu.uDecay.value = Math.max(0.3 * rm, Math.min(0.95, 0.35 + Math.min(st.energy, 1) * 0.5 + st.glitch * 0.1 + st.collapse * 0.1));
+    tu.uDrift.value.set(st.velScreen.x * dt * 0.25 * st.hover * (1 - rm), st.velScreen.y * dt * 0.25 * st.hover * (1 - rm) + 0.0008 * st.energy);
     const fu = finalMat.uniforms;
     fu.uTime.value = t; fu.uEnergy.value = st.energy; fu.uGlitch.value = st.glitch; fu.uSpeed.value = st.speed;
-    fu.uCollapse.value = st.collapse; fu.uHover.value = st.hover;
+    fu.uCollapse.value = st.collapse; fu.uHover.value = st.hover * (1 - rm);
     fu.uMouse.value.set(pointer.ndc.x * 0.5 + 0.5, pointer.ndc.y * 0.5 + 0.5);
     fu.uSplitDir.value.copy(st.splitDir);
+
+    // big-beat pulse from behind, every couple of bars, locked to the music when it plays
+    const pk = Sound.pulse();
+    if (pk > 0) {
+      st.pulse = Math.max(st.pulse, pk);
+      fu.uPulseCol.value.copy(pk >= 1 ? PAL.soft : PAL.primary);
+    }
+    vu.uKick.value = pk * (1 - 0.6 * Math.min(1, st.energy));   // particles bounce on the big beats
+    if (pk >= 0.75) st.glitch = Math.max(st.glitch, pk * 0.7);   // the biggest beats hit the image too
+    rainVelMat.uniforms.uKick.value = pk;
+
+    // after a big chaotic episode calms down, the whole palette turns to a new colour
+    if (st.mode === "af") {
+      st.peak = Math.max(st.peak, st.energy + st.collapse);
+      if (st.peak > 1.1 && st.energy < 0.08 && st.collapse < 0.05) { newPalette(); st.peak = 0; }
+    } else st.peak = 0;
+    if (st.mode === "rain" && !st.rainRecoloured) { st.rainRecoloured = true; newPalette(); }
+    stepPalette(dt);
+
+    // letter warp in digital rain: a faint ripple at rest, stronger as you stir and on the beat
+    // rain energy: messing with the rain builds it up, and it drains slowly when left alone
+    st.rainE = Math.max(0, Math.min(1.5, st.rainE + dt * rm * (Math.min(st.speed, 4) * 0.22 * st.hover + st.press * 0.6) - dt * 0.12));
+    const warpTarget = rm * (0.5 + st.pulse * 0.8 + st.rainE * 0.8);
+    warpU.value += (warpTarget - warpU.value) * Math.min(1, dt * 3);
+    const localTarget = rm * (Math.min(st.speed, 3) * 0.6 * st.hover + st.press * 1.2);
+    warpL.value += (localTarget - warpL.value) * Math.min(1, dt * 5);
+    warpC.value.set(hit.x, hit.y, 0);
+    warpT.value = t;
+    st.pulse *= Math.exp(-dt * 2.2);
+    fu.uPulse.value = st.pulse;
+
+    if (rainSeeded) {
+      // rain field sized to what the camera sees; the cursor stirs the air only in digital rain
+      const halfH = camera.position.z * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)), halfW = halfH * camera.aspect;
+      flowMin.set(-halfW * 1.3, -halfH * 1.4);
+      flowSize.set(halfW * 2.6, halfH * 2.8);
+      const ru = rainVelMat.uniforms, rp = rainPosMat.uniforms, fl = flowMat.uniforms;
+      ru.uTime.value = rp.uTime.value = t;
+      ru.uHover.value = st.hover * rm;
+      ru.uPress.value = st.press * rm;
+      ru.uSpeed.value = st.speed;
+      // extra margin so the tilted rain field still covers the corners
+      rp.uTop.value = halfH * 1.4 + 0.4;
+      rp.uBottom.value = halfH * 1.6;
+      rp.uHalfW.value = halfW * 1.5;
+      // weather drifts: wind, turbulence, density and drop size all wander independently
+      const wc = weather;
+      const wx = (k, rate) => vnoise(t * rate * wc.pace, k * 17.3 + wc.seed);
+      ru.uWind.value = wc.wind + (wx(1, 0.05) - 0.5) * wc.gust * (1 + st.rainE * 1.5);
+      ru.uChaos.value = wc.chaos + Math.pow(wx(2, 0.04), 2) * wc.storm + st.pulse * 0.8 + st.rainE * 2.5;
+      ru.uBurst.value = st.burst;
+      st.burst = 0;
+      rp.uDensity.value = wc.dens + (1 - wc.dens) * wx(3, 0.035);
+      rainUniforms.uGrain.value = wc.grain + wc.grainAmp * wx(4, 0.03);
+      fl.uCursor.value.set(hit.x, hit.y);
+      fl.uCursorVel.value.set(st.velWorld.x, st.velWorld.y).multiplyScalar(pointer.inside ? 1 : 0);
+      fl.uSplat.value = rm * (1.6 + st.press * 1.2) * (1 + st.rainE * 0.8);
+      rainUniforms.uAlpha.value = st.rainAlpha;
+      rainUniforms.uCamDist.value = ptMat.uniforms.uCamDist.value;
+      rainUniforms.uCamLocal.value.copy(camera.position).applyMatrix4(inv);
+    }
     Sound.frame(st);
   }
 
@@ -1156,6 +1828,7 @@ body {
     pass(posMat, posRT[nxt]);
     cur = nxt;
     first = false;
+    if (rainSeeded) stepRain(dt);
 
     ptMat.uniforms.tPos.value = posRT[cur].texture;
     renderer.setRenderTarget(sceneRT);
