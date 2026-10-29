@@ -247,7 +247,8 @@ body {
   const S = 1024;            // raster resolution for sampling
   const SPAN = 6.4;          // world units across the raster
 
-  function raster(draw) {
+  const CLIP = 0.75;          // typed glyphs may poke above and below the cap band
+  function raster(draw, clipH) {
     const c = document.createElement("canvas");
     c.width = c.height = S;
     const g = c.getContext("2d", { willReadFrequently: true });
@@ -258,7 +259,7 @@ body {
     g.lineJoin = "miter";
     g.miterLimit = 20;
     g.beginPath();
-    g.rect(-SPAN / 2, -HT, SPAN, HT * 2);
+    g.rect(-SPAN / 2, -clipH, SPAN, clipH * 2);
     g.clip();
     draw(g);
     return g.getImageData(0, 0, S, S).data;
@@ -296,30 +297,63 @@ body {
   };
   const WORD = "AARON", GAP = 0.16;
   const wordW = [...WORD].reduce((s, ch) => s + GLYPH[ch].w, 0) + GAP * (WORD.length - 1);
-  const letterData = [];
-  let penX = -wordW / 2;
-  [...WORD].forEach((ch) => {
-    const x = penX, w = GLYPH[ch].w;
-    letterData.push(raster((g) => GLYPH[ch].draw(g, x, w)));
-    penX += w + GAP;
-  });
-  let unionData = new Uint8ClampedArray(S * S * 4);
-  letterData.forEach((d) => { for (let i = 3; i < d.length; i += 4) unionData[i] = Math.max(unionData[i], d[i]); });
+  const toCol = (x) => (x / SPAN + 0.5) * S;
 
-  function collect(data) {
-    const inner = [], edge = [];
-    const a = (x, y) => (x < 0 || y < 0 || x >= S || y >= S) ? 0 : data[(y * S + x) * 4 + 3];
-    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
-      if (a(x, y) < 128) continue;
-      const isEdge = a(x - 2, y) < 128 || a(x + 2, y) < 128 || a(x, y - 2) < 128 || a(x, y + 2) < 128;
-      (isEdge ? edge : inner).push(x, y);
+  // the whole word in one raster, plus the pixel columns where one letter hands over to the next
+  function drawWord(text) {
+    const cuts = [];
+    if (text === WORD) {
+      let penX = -wordW / 2;
+      const data = raster((g) => [...WORD].forEach((ch, i) => {
+        const w = GLYPH[ch].w;
+        GLYPH[ch].draw(g, penX, w);
+        if (i) cuts.push(toCol(penX - GAP / 2));
+        penX += w + GAP;
+      }), HT);
+      return { data, cuts };
     }
-    return { inner: Int32Array.from(inner), edge: Int32Array.from(edge) };
+    // anything typed: heavy system grotesk, capitals, never wider than AARON so the framing holds
+    const FONT = '800 100px "Helvetica Neue", Helvetica, Arial, sans-serif';
+    const m = document.createElement("canvas").getContext("2d");
+    m.font = FONT;
+    const em = (HT * 2) / ((m.measureText("H").actualBoundingBoxAscent || 72) / 100);
+    const chars = [...text], track = 0.1;
+    const adv = chars.map((ch) => (m.measureText(ch).width / 100) * em);
+    const total = adv.reduce((s, w) => s + w, 0) + track * (chars.length - 1);
+    const k = Math.min(1, wordW / total);
+    let penX = (-total * k) / 2;
+    const data = raster((g) => chars.forEach((ch, i) => {
+      if (i) cuts.push(toCol(penX - (track * k) / 2));
+      g.save();
+      g.translate(penX, -HT * k);
+      g.scale((k * em) / 100, (-k * em) / 100);
+      g.font = FONT;
+      g.fillText(ch, 0, 0);
+      g.restore();
+      penX += (adv[i] + track) * k;
+    }), CLIP);
+    return { data, cuts };
   }
-  // letters sit on slightly staggered depths so the word reads as a sculpture when it tilts
-  const parts = letterData.map((d, i) => ({ px: collect(d), zc: i % 2 ? 0.05 : -0.05, d: 0.12 }));
-  parts.forEach((p) => (p.area = (p.px.inner.length + p.px.edge.length) / 2));
-  const totalArea = parts.reduce((s, p) => s + p.area, 0);
+
+  function collect(data, cuts) {
+    const n = cuts.length + 1, inner = [], edge = [];
+    for (let i = 0; i < n; i++) { inner.push([]); edge.push([]); }
+    const a = (x, y) => (x < 0 || y < 0 || x >= S || y >= S) ? 0 : data[(y * S + x) * 4 + 3];
+    const band = Math.ceil((CLIP * S) / SPAN) + 2;
+    for (let y = S / 2 - band; y < S / 2 + band; y++) for (let x = 0; x < S; x++) {
+      if (a(x, y) < 128) continue;
+      let j = 0;
+      while (j < cuts.length && x >= cuts[j]) j++;
+      const isEdge = a(x - 2, y) < 128 || a(x + 2, y) < 128 || a(x, y - 2) < 128 || a(x, y + 2) < 128;
+      (isEdge ? edge : inner)[j].push(x, y);
+    }
+    // letters sit on slightly staggered depths so the word reads as a sculpture when it tilts
+    return inner.map((_, i) => ({ px: { inner: Int32Array.from(inner[i]), edge: Int32Array.from(edge[i]) }, zc: i % 2 ? 0.05 : -0.05, d: 0.12 }))
+      .filter((p) => (p.area = (p.px.inner.length + p.px.edge.length) / 2) > 0);
+  }
+  let { data: unionData, cuts: wordCuts } = drawWord(WORD);
+  let parts = collect(unionData, wordCuts);
+  let totalArea = parts.reduce((s, p) => s + p.area, 0);
 
   // cheap value noise for scan dropouts
   function h2(a, b) {
@@ -379,33 +413,38 @@ body {
   const aRand = new Float32Array(N * 4);
   const aKind = new Float32Array(N);
   for (let i = 0; i < N; i++) {
-    const r = Math.random();
-    let x, y, z, kind;
-    if (r < 0.035) {
-      // multipath ghost returns smeared behind the surface, along the scanner's rays
-      [x, y, z] = surfacePoint();
-      let dx = x - scanner[0], dy = y - scanner[1], dz = z - scanner[2];
-      const l = Math.hypot(dx, dy, dz), k = Math.pow(Math.random(), 2) * 0.9;
-      x += dx / l * k; y += dy / l * k; z += dz / l * k;
-      kind = 2;
-    } else if (r < 0.05) {
-      x = (Math.random() - 0.5) * 7.6; y = (Math.random() - 0.5) * 2.6; z = (Math.random() - 0.5) * 1.8;
-      kind = 2;
-    } else {
-      [x, y, z, kind] = surfacePoint();
-    }
-    home[i * 4] = x; home[i * 4 + 1] = y; home[i * 4 + 2] = z; home[i * 4 + 3] = Math.random();
     aRef[i * 2] = ((i % SIM) + 0.5) / SIM;
     aRef[i * 2 + 1] = (Math.floor(i / SIM) + 0.5) / SIM;
-    let cp = Math.random();
-    if (kind === 2) cp = 0.68 + Math.random() * 0.32;
-    else if (kind === 1 && Math.random() < 0.35) cp = 0.6;
     aRand[i * 4] = Math.random();
-    aRand[i * 4 + 1] = cp;
     aRand[i * 4 + 2] = Math.random();
     aRand[i * 4 + 3] = Math.random();
-    aKind[i] = kind;
   }
+  function fillHome() {
+    for (let i = 0; i < N; i++) {
+      const r = Math.random();
+      let x, y, z, kind;
+      if (r < 0.035) {
+        // multipath ghost returns smeared behind the surface, along the scanner's rays
+        [x, y, z] = surfacePoint();
+        let dx = x - scanner[0], dy = y - scanner[1], dz = z - scanner[2];
+        const l = Math.hypot(dx, dy, dz), k = Math.pow(Math.random(), 2) * 0.9;
+        x += dx / l * k; y += dy / l * k; z += dz / l * k;
+        kind = 2;
+      } else if (r < 0.05) {
+        x = (Math.random() - 0.5) * 7.6; y = (Math.random() - 0.5) * 2.6; z = (Math.random() - 0.5) * 1.8;
+        kind = 2;
+      } else {
+        [x, y, z, kind] = surfacePoint();
+      }
+      home[i * 4] = x; home[i * 4 + 1] = y; home[i * 4 + 2] = z; home[i * 4 + 3] = Math.random();
+      let cp = Math.random();
+      if (kind === 2) cp = 0.68 + Math.random() * 0.32;
+      else if (kind === 1 && Math.random() < 0.35) cp = 0.6;
+      aRand[i * 4 + 1] = cp;
+      aKind[i] = kind;
+    }
+  }
+  fillHome();
   const homeTex = new THREE.DataTexture(home, SIM, SIM, THREE.RGBAFormat, THREE.FloatType);
   homeTex.minFilter = homeTex.magFilter = THREE.NearestFilter;
   homeTex.needsUpdate = true;
@@ -913,18 +952,21 @@ body {
     for (let i = 0; i < n * n; i++) sd[i] = (Math.sqrt(out[i]) - Math.sqrt(inn[i])) * unit;
     return sd;
   }
-  const sdU = partSdf(unionData);
-  letterData.length = 0;
-  unionData = null;
   const enc = (d) => Math.round((Math.max(-SDF_RANGE, Math.min(SDF_RANGE, d)) / (2 * SDF_RANGE) + 0.5) * 255);
   const sdfBytes = new Uint8Array(SDF_RES * SDF_RES * 4);
-  for (let y = 0; y < SDF_RES; y++) for (let x = 0; x < SDF_RES; x++) {
-    const e = enc(sdU[y * SDF_RES + x]), dst = ((SDF_RES - 1 - y) * SDF_RES + x) * 4;
-    sdfBytes[dst] = sdfBytes[dst + 1] = sdfBytes[dst + 2] = sdfBytes[dst + 3] = e;
-  }
   const sdfTex = new THREE.DataTexture(sdfBytes, SDF_RES, SDF_RES, THREE.RGBAFormat, THREE.UnsignedByteType);
   sdfTex.minFilter = sdfTex.magFilter = THREE.LinearFilter;
-  sdfTex.needsUpdate = true;
+  function writeSdf(data) {
+    const sdU = partSdf(data);
+    for (let y = 0; y < SDF_RES; y++) for (let x = 0; x < SDF_RES; x++) {
+      const e = enc(sdU[y * SDF_RES + x]), dst = ((SDF_RES - 1 - y) * SDF_RES + x) * 4;
+      sdfBytes[dst] = sdfBytes[dst + 1] = sdfBytes[dst + 2] = sdfBytes[dst + 3] = e;
+    }
+    sdfTex.needsUpdate = true;
+  }
+  writeSdf(unionData);
+  unionData = null;
+  let sdfPending = null;   // a typed word's field waits until the rain is actually needed
   const partZ = new THREE.Vector3(parts[0].zc, parts[1].zc, parts[2].zc);
   const partD = new THREE.Vector3(parts[0].d, parts[1].d, parts[2].d);
 
@@ -1268,6 +1310,7 @@ body {
   function warmRain() {
     if (rainWarm) return;
     rainWarm = true;
+    if (sdfPending) { writeSdf(sdfPending); sdfPending = null; }
     pass(rainVelMat, rVelRT[1]);
     pass(rainPosMat, rPosRT[1]);
     pass(flowMat, flowRT[1]);
@@ -1838,9 +1881,50 @@ body {
   const rayO = velMat.uniforms.uRayO.value, rayD = velMat.uniforms.uRayD.value;
   const hit = new THREE.Vector3(), tmpV = new THREE.Vector3();
 
+  // ---------- typing: whatever you type becomes the sculpture ----------
+  // Backspace edits, Esc (or an empty word, or a minute without typing) brings AARON back.
+  const TYPEABLE = /^[\p{L}\p{N}!?&@#$%*+=.,:;'"()\/ -]$/u;
+  let typed = "", shown = WORD, wordTimer = 0, lastKey = 0;
+  function setWord(text) {
+    if (text === shown) return;
+    const { data, cuts } = drawWord(text);
+    const next = collect(data, cuts);
+    if (!next.length) return;
+    shown = text;
+    parts = next;
+    totalArea = parts.reduce((s, p) => s + p.area, 0);
+    fillHome();
+    homeTex.needsUpdate = true;
+    geo.attributes.aKind.needsUpdate = geo.attributes.aRand.needsUpdate = true;
+    if (rainWarm) writeSdf(data);
+    else sdfPending = data;
+  }
+  addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
+    let next;
+    if (e.key === "Escape") next = "";
+    else if (e.key === "Backspace") next = [...typed].slice(0, -1).join("");
+    else if (e.key.length === 1 && TYPEABLE.test(e.key)) next = [...typed].length < 14 ? typed + e.key.toUpperCase() : typed;
+    else return;
+    e.preventDefault();
+    // keep Space from pressing whichever control was clicked last
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    if (next === typed) return;
+    typed = next;
+    lastKey = performance.now() / 1000;
+    // every key knocks the particles loose a little
+    st.glitch = Math.max(st.glitch, 0.55);
+    st.energy = Math.min(1.4, st.energy + 0.12);
+    Sound.glitch(0.6);
+    if (st.mode === "rain") st.burst = Math.max(st.burst, 0.5);
+    clearTimeout(wordTimer);
+    wordTimer = setTimeout(() => setWord(typed.trim() || WORD), 60);
+  });
+
   function update(dt, t) {
     const now = performance.now() / 1000;
     const idleFor = now - st.lastMove;
+    if (typed && now - lastKey > 60) { typed = ""; setWord(WORD); }
     const active = pointer.inside && idleFor < 0.25;
 
     st.hover += ((pointer.inside ? 1 : 0) - st.hover) * Math.min(1, dt * (pointer.inside ? 6 : 2.5));
