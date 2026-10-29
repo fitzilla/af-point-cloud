@@ -1,0 +1,19 @@
+index.html
+  s_2e47aa980f998f::t_e1d8ed94cdc0b5 250-251,262,300-336,338-340,342-343,345-346,348,350-352,354-356,422-447,959-969,1313,1884-1923,1927
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "821c5e7cc0e8fca3a0dcc1b6d1bbdd0a4344ca30",
+  "prompts": {},
+  "sessions": {
+    "s_2e47aa980f998f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b3c7448d-e150-4670-85f4-faba3ba61633",
+        "model": "unknown"
+      },
+      "human_author": "Aaron Fitzsimmons <afitzsimmons@stora.co>"
+    }
+  }
+}
