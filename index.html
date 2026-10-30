@@ -1929,7 +1929,7 @@ body {
   const hit = new THREE.Vector3(), tmpV = new THREE.Vector3();
 
   // ---------- typing: whatever you type becomes the sculpture ----------
-  // Backspace edits, Esc (or an empty word, or a minute without typing) brings AARON back.
+  // Backspace edits, Esc (or an empty word) brings AARON back.
   const TYPEABLE = /^[\p{L}\p{N}!?&@#$%*+=.,:;'"()\/ -]$/u;
   const params = new URLSearchParams(location.search);
   let typed = "", shown = WORD, wordTimer = 0, lastKey = 0;
@@ -2063,7 +2063,8 @@ body {
   function update(dt, t) {
     const now = performance.now() / 1000;
     const idleFor = now - st.lastMove;
-    if (typed && now - lastKey > 60) { typed = ""; setWord(WORD); }
+    // on your own the word drifts back to AARON after a minute; when shared, it stays until someone changes it
+    if (typed && !mp.ws && now - lastKey > 60) { typed = ""; setWord(WORD); }
     const active = pointer.inside && idleFor < 0.25;
 
     st.hover += ((pointer.inside ? 1 : 0) - st.hover) * Math.min(1, dt * (pointer.inside ? 6 : 2.5));
