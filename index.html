@@ -1989,7 +1989,7 @@ body {
 
   // ---------- together: everyone on the page sees each other's cursors (which stir the letters) and anyone can type the word ----------
   // The relay is a small Cloudflare worker (see relay/); ?mp=ws://... points at another one for testing.
-  const RELAY = "";   // set once the relay is deployed, e.g. "wss://aaron-cursors.<account>.workers.dev/ws"
+  const RELAY = "wss://aaron-cursors.aaron-cursors.workers.dev/ws";
   const MP_URL = params.get("mp") || (RELAY && location.hostname === "aaronfitzsimmons.com" ? RELAY : "");
   const peerBox = $("peers"), peers = new Map();
   const peerU = velMat.uniforms.uPeer.value, peerV = velMat.uniforms.uPeerVel.value, peerP = new THREE.Vector3();
