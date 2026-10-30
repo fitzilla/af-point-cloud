@@ -142,7 +142,7 @@ body {
 }
 </style>
 
-<canvas id="stage" aria-label="The word AARON built from a glitching cloud of coloured particles. Move the pointer through it to disturb it."></canvas>
+<canvas id="stage" aria-label="A word built from a glitching cloud of coloured particles. Move the pointer through it to disturb it, or type to change the word."></canvas>
 
 <div id="peers"></div>
 
@@ -322,6 +322,7 @@ body {
     } },
   };
   const WORD = "AARON", GAP = 0.16;
+  const BLANK = "TYPE...";   // what shows when nobody has typed anything
   const wordW = [...WORD].reduce((s, ch) => s + GLYPH[ch].w, 0) + GAP * (WORD.length - 1);
   const toCol = (x) => (x / SPAN + 0.5) * S;
 
@@ -377,7 +378,7 @@ body {
     return inner.map((_, i) => ({ px: { inner: Int32Array.from(inner[i]), edge: Int32Array.from(edge[i]) }, zc: i % 2 ? 0.05 : -0.05, d: 0.12 }))
       .filter((p) => (p.area = (p.px.inner.length + p.px.edge.length) / 2) > 0);
   }
-  let { data: unionData, cuts: wordCuts } = drawWord(WORD);
+  let { data: unionData, cuts: wordCuts } = drawWord(BLANK);
   let parts = collect(unionData, wordCuts);
   let totalArea = parts.reduce((s, p) => s + p.area, 0);
 
@@ -1929,10 +1930,10 @@ body {
   const hit = new THREE.Vector3(), tmpV = new THREE.Vector3();
 
   // ---------- typing: whatever you type becomes the sculpture ----------
-  // Backspace edits, Esc (or an empty word) brings AARON back.
+  // Backspace edits, Esc (or an empty word) brings back the TYPE... prompt.
   const TYPEABLE = /^[\p{L}\p{N}!?&@#$%*+=.,:;'"()\/ -]$/u;
   const params = new URLSearchParams(location.search);
-  let typed = "", shown = WORD, wordTimer = 0, lastKey = 0;
+  let typed = "", shown = BLANK, wordTimer = 0, lastKey = 0;
   function setWord(text) {
     if (text === shown) return;
     const { data, cuts } = drawWord(text);
@@ -1970,11 +1971,11 @@ body {
     Sound.glitch(0.6);
     if (st.mode === "rain") st.burst = Math.max(st.burst, 0.5);
     clearTimeout(wordTimer);
-    wordTimer = setTimeout(() => setWord(typed.trim() || WORD), 60);
+    wordTimer = setTimeout(() => setWord(typed.trim() || BLANK), 60);
     if (!remote) send({ t: "w", w: typed });
   }
 
-  // reset: back to AARON and the opening scene, out of the rain, with a fresh palette
+  // reset: back to the TYPE... prompt and the opening scene, out of the rain, with a fresh palette
   function resetAll() {
     typeText("");
     Object.assign(st, {
@@ -2063,8 +2064,8 @@ body {
   function update(dt, t) {
     const now = performance.now() / 1000;
     const idleFor = now - st.lastMove;
-    // on your own the word drifts back to AARON after a minute; when shared, it stays until someone changes it
-    if (typed && !mp.ws && now - lastKey > 60) { typed = ""; setWord(WORD); }
+    // on your own the word drifts back to TYPE... after a minute; when shared, it stays until someone changes it
+    if (typed && !mp.ws && now - lastKey > 60) { typed = ""; setWord(BLANK); }
     const active = pointer.inside && idleFor < 0.25;
 
     st.hover += ((pointer.inside ? 1 : 0) - st.hover) * Math.min(1, dt * (pointer.inside ? 6 : 2.5));
