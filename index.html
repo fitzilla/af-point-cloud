@@ -126,11 +126,15 @@ body {
   cursor: pointer;
   transition: opacity 0.2s;
 }
+.controls.left { right: auto; left: calc(max(16px, env(safe-area-inset-left, 0px)) + 4px); }
 .ctl:hover, .ctl[aria-pressed="true"] { opacity: 0.85; }
 .ctl:focus-visible { outline: 1px solid currentColor; outline-offset: 2px; opacity: 1; }
 #snd .waves, #fs .exit { display: none; }
 #snd[aria-pressed="true"] .waves, #fs[aria-pressed="true"] .exit { display: inline; }
 #snd[aria-pressed="true"] .mute, #fs[aria-pressed="true"] .enter { display: none; }
+/* other visitors' cursors */
+#peers { position: fixed; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; }
+#peers i { position: absolute; left: 0; top: 0; width: 6px; height: 6px; margin: -3px 0 0 -3px; background: currentColor; box-shadow: 0 0 8px 2px currentColor, 0 0 22px 6px color-mix(in srgb, currentColor 35%, transparent); opacity: 0; will-change: transform, opacity; }
 .fail { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding-inline: 24px; color: var(--lavender); font: 300 12px/1.8 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
 @media (max-width: 480px) {
   .hud { font-size: 9px; }
@@ -139,6 +143,18 @@ body {
 </style>
 
 <canvas id="stage" aria-label="The word AARON built from a glitching cloud of coloured particles. Move the pointer through it to disturb it."></canvas>
+
+<div id="peers"></div>
+
+<div class="controls left" id="ctl-left">
+  <button id="rst" class="ctl" type="button" aria-label="Reset">
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+      <path d="M5 12a7 7 0 1 0 2.1-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square"/>
+      <path d="M6 3v4.5h4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square"/>
+    </svg>
+    <span>Reset</span>
+  </button>
+</div>
 
 <div class="controls" id="ctl">
   <button id="snd" class="ctl" type="button" aria-pressed="false" aria-label="Turn sound on">
@@ -246,7 +262,7 @@ body {
       if (Math.abs(PAL[key].r - palTarget[key].r) + Math.abs(PAL[key].g - palTarget[key].g) + Math.abs(PAL[key].b - palTarget[key].b) > 0.004) done = false;
     }
     if (done) { for (const key in PAL) PAL[key].copy(palTarget[key]); palTarget = null; }
-    ctlBox.style.color = "#" + PAL.primary.getHexString();
+    ctlBox.style.color = rstBox.style.color = "#" + PAL.primary.getHexString();
   }
   canvas.style.background = "#" + PAL.bgFar.getHexString();
 
@@ -537,6 +553,8 @@ body {
   `;
   const FS_VERT = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
 
+  const MAXP = 6;   // how many other visitors' cursors can stir the letters at once
+
   // ---------- GPU simulation: velocity pass (w = accumulated damage) ----------
   const VEL_FRAG = `
     uniform sampler2D tPos; uniform sampler2D tVel; uniform sampler2D tHome;
@@ -544,6 +562,7 @@ body {
     uniform float uGravity, uDampBoost, uStill, uKick, uFlowAmt;
     uniform sampler2D tFlow; uniform vec2 uFlowMin, uFlowSize;
     uniform vec3 uRayO, uRayD, uMouseVel;
+    uniform vec4 uPeer[${MAXP}]; uniform vec3 uPeerVel[${MAXP}];   // other visitors: xy, presence, speed
     varying vec2 vUv;
     ${HASH}
     ${NOISE}
@@ -595,6 +614,22 @@ body {
       float blast = f * smoothstep(0.8, 3.5, uSpeed);
       acc += normalize(dir * 0.7 + rnd + vec3(1e-4)) * blast * 70.0 * (0.3 + r);
 
+      // everyone else on the page stirs the letters with their cursors too
+      float fPeers = 0.0;
+      for (int i = 0; i < ${MAXP}; i++) {
+        vec4 q = uPeer[i];
+        if (q.z <= 0.0) continue;
+        vec2 dq = p.xy - q.xy;
+        float dl = length(dq);
+        float fp = smoothstep(uRadius * (1.0 + min(q.w, 4.0) * 0.12), 0.0, dl) * q.z;
+        if (fp <= 0.0) continue;
+        vec3 pd = dl > 1e-4 ? vec3(dq / dl, 0.0) : dir;
+        acc += pd * fp * mix(-7.0, 16.0, repel);
+        acc += uPeerVel[i] * fp * (5.0 + min(q.w, 5.0) * 5.0);
+        acc += normalize(pd * 0.7 + rnd + vec3(1e-4)) * fp * smoothstep(0.8, 3.5, q.w) * 70.0 * (0.3 + r);
+        fPeers += fp * (0.3 + min(q.w, 5.0) * 1.2);
+      }
+
       // collapse: radial dispersal into abstraction
       acc += normalize(p + rnd * 0.6 + vec3(1e-4)) * uCollapse * 2.5 * (0.2 + r);
       acc.x += sign(p.x + rnd.x) * uCollapse * 4.5 * (0.3 + r);   // fling wide, out to the sides
@@ -612,7 +647,7 @@ body {
       if (sp > 9.0) v *= 9.0 / sp;
 
       // damage accumulates where the pointer works the surface, heals slowly
-      dmg += f * (0.3 + min(uSpeed, 5.0) * 1.2) * uDt * 2.0;
+      dmg += (f * (0.3 + min(uSpeed, 5.0) * 1.2) + fPeers) * uDt * 2.0;
       dmg += uCollapse * uDt * 0.6;
       dmg += uKick * uKick * 0.6 * r;   // beat-blown particles flare and swell
       dmg += sweep * uDt * 1.2;          // swept fragments stay lit while they fly
@@ -856,6 +891,7 @@ body {
     uGravity: { value: 0 }, uDampBoost: { value: 0 }, uStill: { value: 0 }, uKick: { value: 0 },
     uFlowAmt: { value: 0 }, tFlow: { value: null }, uFlowMin: { value: new THREE.Vector2() }, uFlowSize: { value: new THREE.Vector2(1, 1) },
     uRayO: { value: V3() }, uRayD: { value: new THREE.Vector3(0, 0, -1) }, uMouseVel: { value: V3() },
+    uPeer: { value: Array.from({ length: MAXP }, () => new THREE.Vector4()) }, uPeerVel: { value: Array.from({ length: MAXP }, V3) },
   });
   const posMat = fsMat(POS_FRAG, {
     tPos: { value: null }, tVel: { value: null }, tHome: { value: homeTex },
@@ -1791,9 +1827,10 @@ body {
     return { toggle, frame, glitch, pulse, splash };
   })();
 
-  const ctlBox = $("ctl"), sndBtn = $("snd"), fsBtn = $("fs");
-  ctlBox.style.color = "#" + PAL.primary.getHexString();
+  const ctlBox = $("ctl"), sndBtn = $("snd"), fsBtn = $("fs"), rstBox = $("ctl-left"), rstBtn = $("rst");
+  ctlBox.style.color = rstBox.style.color = "#" + PAL.primary.getHexString();
   ctlBox.addEventListener("pointerdown", (e) => e.stopPropagation());
+  rstBox.addEventListener("pointerdown", (e) => e.stopPropagation());
 
   // full screen: hidden where the browser can't do it (iPhone Safari, some embeds)
   const root = document.documentElement;
@@ -1894,6 +1931,7 @@ body {
   // ---------- typing: whatever you type becomes the sculpture ----------
   // Backspace edits, Esc (or an empty word, or a minute without typing) brings AARON back.
   const TYPEABLE = /^[\p{L}\p{N}!?&@#$%*+=.,:;'"()\/ -]$/u;
+  const params = new URLSearchParams(location.search);
   let typed = "", shown = WORD, wordTimer = 0, lastKey = 0;
   function setWord(text) {
     if (text === shown) return;
@@ -1919,6 +1957,10 @@ body {
     e.preventDefault();
     // keep Space from pressing whichever control was clicked last
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    typeText(next);
+  });
+  // remote: someone else typed it, so don't send it back
+  function typeText(next, remote) {
     if (next === typed) return;
     typed = next;
     lastKey = performance.now() / 1000;
@@ -1929,7 +1971,94 @@ body {
     if (st.mode === "rain") st.burst = Math.max(st.burst, 0.5);
     clearTimeout(wordTimer);
     wordTimer = setTimeout(() => setWord(typed.trim() || WORD), 60);
-  });
+    if (!remote) send({ t: "w", w: typed });
+  }
+
+  // reset: back to AARON and the opening scene, out of the rain, with a fresh palette
+  function resetAll() {
+    typeText("");
+    Object.assign(st, {
+      mode: "af", modeT: 0, unlock: 0, rev: 0, rainMix: 0, rainAlpha: 0, gravity: 0, damp: 0, rainE: 0, burst: 0,
+      energy: 0, collapse: 0, collapseHold: 0, rainRecoloured: false, glitch: 1,
+    });
+    rainSeeded = false;
+    rainPoints.visible = rainLines.visible = false;
+    newPalette();
+  }
+  rstBtn.addEventListener("click", () => { resetAll(); rstBtn.blur(); });
+
+  // ---------- together: everyone on the page sees each other's cursors (which stir the letters) and anyone can type the word ----------
+  // The relay is a small Cloudflare worker (see relay/); ?mp=ws://... points at another one for testing.
+  const RELAY = "";   // set once the relay is deployed, e.g. "wss://aaron-cursors.<account>.workers.dev/ws"
+  const MP_URL = params.get("mp") || (RELAY && location.hostname === "aaronfitzsimmons.com" ? RELAY : "");
+  const peerBox = $("peers"), peers = new Map();
+  const peerU = velMat.uniforms.uPeer.value, peerV = velMat.uniforms.uPeerVel.value, peerP = new THREE.Vector3();
+  const mp = { ws: null, tries: 0, sentAt: 0, sx: 9, sy: 9, left: true };
+  const num = (v, lim) => (typeof v === "number" && Number.isFinite(v) ? Math.max(-lim, Math.min(lim, v)) : 0);
+  function send(m) { if (mp.ws && mp.ws.readyState === 1) mp.ws.send(JSON.stringify(m)); }
+  function connect() {
+    if (!MP_URL || mp.ws) return;
+    let ws;
+    try { ws = mp.ws = new WebSocket(MP_URL); } catch (e) { return; }
+    ws.onopen = () => { mp.tries = 0; mp.left = true; };
+    ws.onmessage = (e) => {
+      let m;
+      try { m = JSON.parse(e.data); } catch (err) { return; }
+      if (m.t === "c") peerMove(m);
+      else if (m.t === "l" || m.t === "x") peerGone(m.id, m.t === "x");
+      else if ((m.t === "w" || m.t === "hi") && typeof m.w === "string" && [...m.w].length <= 14 && [...m.w].every((ch) => TYPEABLE.test(ch))) typeText(m.w.toUpperCase(), true);
+    };
+    ws.onclose = () => {
+      mp.ws = null;
+      for (const id of [...peers.keys()]) peerGone(id, true);
+      setTimeout(connect, Math.min(30000, 1500 * 2 ** mp.tries++));   // back off and try again
+    };
+  }
+  function peerMove(m) {
+    if (typeof m.id !== "string") return;
+    let p = peers.get(m.id);
+    if (!p) {
+      if (peers.size > 60) return;
+      const el = document.createElement("i");
+      el.style.color = `hsl(${num(m.h, 360)} 100% 66%)`;
+      peerBox.appendChild(el);
+      p = { el, x: num(m.x, 10), y: num(m.y, 10), a: 0 };
+      peers.set(m.id, p);
+    }
+    Object.assign(p, { tx: num(m.x, 10), ty: num(m.y, 10), vx: num(m.vx, 14), vy: num(m.vy, 14), s: num(m.s, 50), seen: performance.now() / 1000, gone: false });
+  }
+  function peerGone(id, remove) {
+    const p = peers.get(id);
+    if (!p) return;
+    if (remove) { p.el.remove(); peers.delete(id); } else p.gone = true;
+  }
+  // send my cursor about ten times a second while it moves, and follow everyone else's
+  function stepPeers(dt, now) {
+    if (mp.ws && mp.ws.readyState === 1) {
+      if (pointer.inside && st.lastHit) {
+        const moved = Math.abs(hit.x - mp.sx) + Math.abs(hit.y - mp.sy) > 0.003;
+        if (now - mp.sentAt > 0.1 && (moved || now - mp.sentAt > 1)) {
+          mp.sentAt = now; mp.sx = hit.x; mp.sy = hit.y; mp.left = false;
+          send({ t: "c", x: +hit.x.toFixed(3), y: +hit.y.toFixed(3), vx: +st.velWorld.x.toFixed(2), vy: +st.velWorld.y.toFixed(2), s: +st.speed.toFixed(2) });
+        }
+      } else if (!mp.left) { mp.left = true; send({ t: "l" }); }
+    }
+    let k = 0;
+    const decay = Math.exp(-dt * 4), follow = Math.min(1, dt * 14);
+    for (const [id, p] of peers) {
+      const fresh = !p.gone && now - p.seen < 3;
+      p.a += ((fresh ? 1 : 0) - p.a) * Math.min(1, dt * 5);
+      if (!fresh && p.a < 0.01) { p.el.style.opacity = "0"; if (now - p.seen > 60) peerGone(id, true); continue; }
+      p.x += (p.tx - p.x) * follow; p.y += (p.ty - p.y) * follow;
+      p.vx *= decay; p.vy *= decay; p.s *= decay;
+      peerP.set(p.x, p.y, 0).applyMatrix4(sculpture.matrixWorld).project(camera);
+      p.el.style.transform = `translate(${((peerP.x * 0.5 + 0.5) * innerWidth).toFixed(1)}px, ${((0.5 - peerP.y * 0.5) * innerHeight).toFixed(1)}px)`;
+      p.el.style.opacity = (p.a * 0.9).toFixed(2);
+      if (k < MAXP) { peerU[k].set(p.x, p.y, p.a, p.s); peerV[k].set(p.vx, p.vy, 0); k++; }
+    }
+    for (; k < MAXP; k++) peerU[k].z = 0;
+  }
+  connect();
 
   function update(dt, t) {
     const now = performance.now() / 1000;
@@ -2026,6 +2155,7 @@ body {
       st.lastHit.copy(hit);
     }
     st.velWorld.multiplyScalar(Math.exp(-dt * 4));
+    stepPeers(dt, now);
 
     const vu = velMat.uniforms;
     vu.uTime.value = t; vu.uDt.value = dt; vu.uEnergy.value = st.energy; vu.uCollapse.value = st.collapse;
