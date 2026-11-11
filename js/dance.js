@@ -531,6 +531,8 @@
         for (const k of TORSO) out[k] += (gp[k] - out[k]) * g.wTorso * g.seen;
         for (const k of HEAD) out[k] += (gp[k] - out[k]) * g.wHead * g.seen;
         for (const k of LEGS) out[k] += (gp[k] - out[k]) * g.wLegs * g.seen;
+        // their mouth is his mouth: open yours and his jaw drops
+        if (g.wJaw > 0.01) out.jaw += (g.jaw - out.jaw) * g.wJaw * g.seen;
       }
       // the camera's on and there's nobody there: hand to his brow, looking for them
       if (g && g.on) {

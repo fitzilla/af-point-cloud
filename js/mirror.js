@@ -9,6 +9,7 @@
   "use strict";
   const LIB = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.2";
   const MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
+  const FACE = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
   // the tracker's numbering (its left and right are the person's own)
   const NOSE = 0, EYE_L = 2, EYE_R = 5, EAR_L = 7, EAR_R = 8, SH_L = 11, SH_R = 12, EL_L = 13, EL_R = 14, WR_L = 15, WR_R = 16, IX_L = 19, IX_R = 20;
   const HIP_L = 23, HIP_R = 24, KN_L = 25, KN_R = 26, AN_L = 27, AN_R = 28;
@@ -31,6 +32,7 @@
       wristL: [0, 0, 0], wristR: [0, 0, 0], wristHeadL: [0, 0, 0], wristHeadR: [0, 0, 0], nearHeadL: 0, nearHeadR: 0, wWristL: 0, wWristR: 0,
       pose: { hx: 0, hy: 0, hz: 0, hrx: 0, hry: 0, hrz: 0, srx: 0, sry: 0, srz: 0, crx: 0, cry: 0, crz: 0, nrx: 0, nry: 0, nrz: 0,
         fLx: 0, fLy: 0, fLz: 0, fLr: 0, fRx: 0, fRy: 0, fRz: 0, fRr: 0, kL: 0.25, kR: 0.25, air: 0, turn: 0 },
+      jaw: 0, jawWant: 0, wJaw: 0,
       floor: 0, legImg: 0, back: 0, hipsLately: 0, wide: 0, turnSign: 1,
     };
   }
@@ -180,12 +182,17 @@
   // The camera and the tracker. `R` is the skeleton's own measurements.
   function createMirror(R) {
     const g = createGuide();
+    let faces = null, lastFace = 0, jawSeen = -9;
     let video = null, stream = null, tracker = null, loading = null, lastFrame = -1, lastRun = 0, lastSeen = -9, fails = 0, status = "off";
 
     async function fetchTracker() {
       const vision = await import(LIB + "/vision_bundle.mjs");
       const files = await vision.FilesetResolver.forVisionTasks(LIB + "/wasm");
       const make = (delegate) => vision.PoseLandmarker.createFromOptions(files, { baseOptions: { modelAssetPath: MODEL, delegate }, runningMode: "VIDEO", numPoses: 1, minPoseDetectionConfidence: 0.6, minPosePresenceConfidence: 0.6, minTrackingConfidence: 0.6 });
+      // The body tracker can't see a mouth, so a second, smaller one watches their face for how far
+      // their jaw is open. It's an extra: if it won't load, he copies everything else regardless.
+      const face = (delegate) => vision.FaceLandmarker.createFromOptions(files, { baseOptions: { modelAssetPath: FACE, delegate }, runningMode: "VIDEO", numFaces: 1, outputFaceBlendshapes: true });
+      face("GPU").catch(() => face("CPU")).then((f) => { faces = f; }, () => {});
       try { return await make("GPU"); } catch (e) { return make("CPU"); }
     }
     // asks for the camera and shows it in `el`; throws what getUserMedia throws
@@ -229,7 +236,19 @@
           }
           fails = 0;
         } catch (e) { if (++fails > 8) { stop(); status = "failed"; } }
+        // the jaw, fifteen times a second: plenty for a mouth, and half the work
+        if (faces && now - lastFace > 1 / 16) {
+          lastFace = now;
+          try {
+            const shapes = faces.detectForVideo(video, now * 1000 + 0.5).faceBlendshapes;
+            const open = shapes && shapes[0] && shapes[0].categories.find((c) => c.categoryName === "jawOpen");
+            if (open) { g.jawWant = Math.min(1, Math.max(0, (open.score - 0.04) * 2.2)); jawSeen = now; }
+          } catch (e) { faces = null; }      // it's only an extra: stop asking
+        }
       }
+      const mouth = g.on && now - jawSeen < 0.5;
+      g.wJaw += ((mouth ? 1 : 0) - g.wJaw) * Math.min(1, dt * 5);
+      g.jaw += (g.jawWant - g.jaw) * Math.min(1, dt * 28);
       const there = g.on && now - lastSeen < 0.5;
       g.seen += ((there ? 1 : 0) - g.seen) * Math.min(1, dt * (there ? 5 : 2.5));
       if (g.on && tracker) status = there ? "copying" : "looking";
