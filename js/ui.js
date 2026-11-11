@@ -22,7 +22,6 @@
     { id: "v2AC41dglnM", name: "Thunderstruck", style: "rock", by: "AC/DC", bpm: 134, vibe: "hype" },
     { id: "CD-E-LDc384", name: "Enter Sandman", style: "metal", by: "Metallica", bpm: 123, vibe: "hype" },
     { id: "y6120QOlsfU", name: "Sandstorm", style: "rave", by: "Darude", bpm: 136, vibe: "hype" },
-    { id: "tRsQsTMvPNg", name: "Claude FM", style: "chill", by: "lofi, live", bpm: 80, vibe: "chill" },
   ];
 
   // ---------- cards: one open at a time; click away or Esc closes ----------
