@@ -49,7 +49,7 @@
     }
     for (const t of triggers) t.setAttribute("aria-expanded", String(!!card && t.dataset.card === card.id));
     document.body.classList.toggle("card-open", !!card);
-    if (card) card.focus({ preventScroll: true });
+    if (card && !matchMedia("(pointer: coarse)").matches) card.focus({ preventScroll: true });
   }
   for (const t of triggers) t.addEventListener("click", () => { const card = $(t.dataset.card); show(openCard === card ? null : card); });
   addEventListener("pointerdown", (e) => { if (openCard && !openCard.contains(e.target) && !e.target.closest(".dock, #corner")) show(null); });
@@ -69,7 +69,8 @@
     const clear = () => { card.style.transition = card.style.transform = card.style.opacity = ""; };
     card.addEventListener("touchstart", (e) => {
       const touch = e.touches[0];
-      state = e.touches.length === 1 && openCard === card && card.scrollTop <= 0 ? "maybe" : "no";
+      const onGrab = e.target instanceof Element && !!e.target.closest(".grab, h2");
+      state = e.touches.length === 1 && openCard === card && (card.scrollTop <= 0 || onGrab) ? "maybe" : "no";
       x0 = touch.clientX; y0 = touch.clientY; t0 = performance.now(); dy = 0;
     }, { passive: true });
     card.addEventListener("touchmove", (e) => {
@@ -91,11 +92,11 @@
       if (state !== "drag") { state = "idle"; return; }
       state = "idle";
       const fast = dy / Math.max(1, performance.now() - t0) > 0.5;
-      card.style.transition = "transform 0.2s ease, opacity 0.2s ease";
+      card.style.transition = "transform 0.22s ease-out, opacity 0.22s ease-out";
       if (dy > 90 || (dy > 30 && fast)) {
-        card.style.transform = `translateY(${card.offsetHeight + 40}px)`;
+        card.style.transform = `translateY(${card.offsetHeight + innerHeight * 0.3}px)`;
         card.style.opacity = "0";
-        setTimeout(() => { if (openCard === card) show(null); setTimeout(clear, 250); }, 200);
+        setTimeout(() => { if (openCard === card) show(null); setTimeout(clear, 300); }, 220);
       } else {
         card.style.transform = card.style.opacity = "";
         setTimeout(() => { if (state === "idle") card.style.transition = ""; }, 220);
