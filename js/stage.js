@@ -722,8 +722,8 @@
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     typeText(next);
   });
-  // remote: someone else typed it, so don't send it back
-  function typeText(next, remote) {
+  // what you type is yours: other visitors see your cursor, never your word
+  function typeText(next) {
     if (next === typed) return;
     typed = next;
     lastKey = performance.now() / 1000;
@@ -732,13 +732,10 @@
     dance.talk();
     clearTimeout(wordTimer);
     wordTimer = setTimeout(() => setText(typed.trim()), 60);
-    if (!remote) {
-      SK.ui && SK.ui.acted();
-      send({ t: "w", w: typed });
-      // once they've stopped typing, not on every key
-      clearTimeout(wordSent);
-      wordSent = setTimeout(() => { const word = typed.trim(); if (word) track("word_typed", { word, length: [...word].length }); }, 1500);
-    }
+    SK.ui && SK.ui.acted();
+    // once they've stopped typing, not on every key
+    clearTimeout(wordSent);
+    wordSent = setTimeout(() => { const word = typed.trim(); if (word) track("word_typed", { word, length: [...word].length }); }, 1500);
   }
 
   // reset: symbols again, a fresh palette, and he falls in a heap and puts himself back together
@@ -749,7 +746,7 @@
     newPalette();
   }
 
-  // ---------- together: everyone on the page sees each other's cursors (which stir him) and anyone can type ----------
+  // ---------- together: everyone on the page sees each other's cursors, which stir him ----------
   // The relay is a small Cloudflare worker (see relay/); ?mp=ws://... points at another one for testing.
   const RELAY = "wss://aaron-cursors.aaron-cursors.workers.dev/ws";
   const MP_URL = params.get("mp") || (RELAY && LIVE ? RELAY : "");
@@ -768,7 +765,6 @@
       try { m = JSON.parse(e.data); } catch (err) { return; }
       if (m.t === "c") peerMove(m);
       else if (m.t === "l" || m.t === "x") peerGone(m.id, m.t === "x");
-      else if ((m.t === "w" || m.t === "hi") && typeof m.w === "string" && [...m.w].length <= 14 && [...m.w].every((ch) => TYPEABLE.test(ch))) typeText(m.w.toUpperCase(), true);
     };
     ws.onclose = () => {
       mp.ws = null;
@@ -827,8 +823,8 @@
   function update(dt, t) {
     const now = performance.now() / 1000;
     const idleFor = now - st.lastMove;
-    // on your own he drifts back to symbols after a minute; when shared, the word stays until someone changes it
-    if (typed && !mp.ws && now - lastKey > 60) { typed = ""; setText(""); }
+    // a minute after the last key he drifts back to symbols
+    if (typed && now - lastKey > 60) { typed = ""; setText(""); }
     const active = pointer.inside && idleFor < 0.25;
 
     st.hover += ((pointer.inside ? 1 : 0) - st.hover) * Math.min(1, dt * (pointer.inside ? 6 : 2.5));
