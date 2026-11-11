@@ -257,7 +257,7 @@
       vec4 V = texture2D(tVel, vUv);
       vec4 H = texture2D(tHome, vUv);
       vec3 p = P.xyz; vec3 v = V.xyz; float dmg = P.w;
-      float bone = homeBone(H), glyph = homeGlyph(H), r = homeSeed(H), air = step(17.5, bone);
+      float bone = homeBone(H), glyph = homeGlyph(H), r = homeSeed(H), air = step(21.5, bone);
       vec3 h = boneAt(bone, vec4(H.xyz, 1.0), 0.0);
       // how fast its bone is carrying it: the particle rides along, and the spring only has to tidy up
       vec3 ride = (h - boneAt(bone, vec4(H.xyz, 1.0), 1.0)) / max(uDt, 0.004);
@@ -348,7 +348,7 @@
     void main(){
       vec4 P = texture2D(tPos, aRef);
       vec4 H = texture2D(tHome, aRef);
-      float bone = homeBone(H), air = step(17.5, bone), glyph = step(-0.5, aGlyph);
+      float bone = homeBone(H), air = step(21.5, bone), glyph = step(-0.5, aGlyph);
       vec3 h = boneAt(bone, vec4(H.xyz, 1.0), 0.0);
       vec3 p = P.xyz; float dmg = P.w;
       float tq = floor(uTime * 24.0);

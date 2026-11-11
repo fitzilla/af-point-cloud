@@ -9,13 +9,14 @@
   const SK = (window.SK = window.SK || {});
   const FLOOR = -1.8;
   const W = 32;                    // the bone texture is this wide: one column a bone
-  const B = { pelvis: 0, spine: 1, chest: 2, neck: 3, head: 4, jaw: 5, armL: 6, foreL: 7, handL: 8, armR: 9, foreR: 10, handR: 11, thighL: 12, shinL: 13, footL: 14, thighR: 15, shinR: 16, footR: 17, air: 18 };
-  const NB = 19;
+  const B = { pelvis: 0, spine: 1, chest: 2, neck: 3, head: 4, jaw: 5, armL: 6, foreL: 7, handL: 8, armR: 9, foreR: 10, handR: 11, thighL: 12, shinL: 13, footL: 14, thighR: 15, shinR: 16, footR: 17, fingersL: 18, thumbL: 19, fingersR: 20, thumbR: 21, air: 22 };
+  const NB = 23;
 
   // ---------- where the joints are at rest (he's 3.6 tall, feet on FLOOR, facing us) ----------
   const J = {
     pelvis: [0, 0.02, 0], spine: [0, 0.2, 0], chest: [0, 0.58, 0], neck: [0, 1.18, 0], head: [0, 1.32, 0], jaw: [0, 1.37, 0],
     shoulder: [0.37, 1.1, 0], elbow: [0.43, 0.5, 0], wrist: [0.47, -0.02, 0], fingertip: [0.48, -0.32, 0],
+    knuckle: [0.4723, -0.09, 0], thumbRoot: [0.4713, -0.06, 0],      // along the hand: where the fingers, and the thumb, hinge
     hip: [0.19, 0.06, 0], knee: [0.165, -0.82, 0], ankle: [0.15, -1.62, 0], toe: [0.225, -1.755, 0.255],
   };
   const v3 = (a, side) => new THREE.Vector3(a[0] * (side || 1), a[1], a[2]);
@@ -27,6 +28,9 @@
     side2("armR", B.chest, "shoulder", "elbow", -1), side2("foreR", B.armR, "elbow", "wrist", -1), side2("handR", B.foreR, "wrist", "fingertip", -1),
     side2("thighL", B.pelvis, "hip", "knee", 1), side2("shinL", B.thighL, "knee", "ankle", 1), side2("footL", B.shinL, "ankle", "toe", 1),
     side2("thighR", B.pelvis, "hip", "knee", -1), side2("shinR", B.thighR, "knee", "ankle", -1), side2("footR", B.shinR, "ankle", "toe", -1),
+    // each hand's four fingers are one bone and its thumb another, so the hand can open and close
+    side2("fingersL", B.handL, "knuckle", "fingertip", 1), side2("thumbL", B.handL, "thumbRoot", "fingertip", 1),
+    side2("fingersR", B.handR, "knuckle", "fingertip", -1), side2("thumbR", B.handR, "thumbRoot", "fingertip", -1),
     { name: "air", parent: -1, pos: new THREE.Vector3(), dir: new THREE.Vector3(0, 1, 0), side: 0 },
   ];
 
@@ -114,9 +118,10 @@
     shapes[B["fore" + L]].push(seg(-0.026, 0.02, -0.03, fore, 0.017, 0.019, { g: 2 }), seg(0.026, 0, 0.022, fore - 0.02, 0.018, 0.014, { g: 2 }));
     const hand = shapes[B["hand" + L]];
     hand.push(ell(0, 0.035, 0.05, 0.035, { g: 0 }));
-    [[-0.05, -0.1, 0.15], [-0.027, -0.035, 0.25], [-0.003, -0.004, 0.28], [0.02, 0.028, 0.26], [0.042, 0.058, 0.21]].forEach(([x0, x1, tip]) => {
-      const mid = 0.07 + (tip - 0.07) * 0.5, xm = x0 + (x1 - x0) * 0.5;
-      hand.push(seg(-x0 * out, 0.07, -xm * out, mid - 0.008, 0.011, 0.01, { g: 2 }), seg(-xm * out, mid + 0.008, -x1 * out, tip, 0.01, 0.008, { g: 2 }));   // thumb on the outside
+    // (the thumb, on the outside, belongs to the thumb bone; the other four to the fingers bone)
+    [[-0.05, -0.1, 0.15], [-0.027, -0.035, 0.25], [-0.003, -0.004, 0.28], [0.02, 0.028, 0.26], [0.042, 0.058, 0.21]].forEach(([x0, x1, tip], k) => {
+      const mid = 0.07 + (tip - 0.07) * 0.5, xm = x0 + (x1 - x0) * 0.5, up = k ? 0.07 : 0.04;      // how far up the hand its bone starts
+      shapes[B[(k ? "fingers" : "thumb") + L]].push(seg(-x0 * out, 0.07 - up, -xm * out, mid - 0.008 - up, 0.011, 0.01, { g: 2 }), seg(-xm * out, mid + 0.008 - up, -x1 * out, tip - up, 0.01, 0.008, { g: 2 }));
     });
     shapes[B["thigh" + L]].push(seg(0, 0.05, 0, thigh - 0.05, 0.036, 0.03), ell(0, 0, 0.055, 0.055, { g: 0 }), ell(0.055 * out, 0.035, 0.035, 0.04, { g: 0 }));
     shapes[B["thigh" + L]].push(ell(-0.03, thigh - 0.02, 0.036, 0.042, { g: 0 }), ell(0.03, thigh - 0.02, 0.036, 0.042, { g: 0 }));
@@ -164,7 +169,7 @@
     const home = new Float32Array(n * 4), ang = new Float32Array(n), size = new Float32Array(n);
     let i = 0;
     const put = (bone, x, y, z, kind) => { home[i * 4] = x; home[i * 4 + 1] = y; home[i * 4 + 2] = z; home[i * 4 + 3] = bone + 32 * kind + R() * 0.999; return i++; };
-    const order = [B.head, B.jaw, B.neck, B.chest, B.spine, B.pelvis, B.armL, B.foreL, B.handL, B.armR, B.foreR, B.handR, B.thighL, B.shinL, B.footL, B.thighR, B.shinR, B.footR];
+    const order = [B.head, B.jaw, B.neck, B.chest, B.spine, B.pelvis, B.armL, B.foreL, B.handL, B.fingersL, B.thumbL, B.armR, B.foreR, B.handR, B.fingersR, B.thumbR, B.thighL, B.shinL, B.footL, B.thighR, B.shinR, B.footR];
     for (const bone of order) {
       for (const p of shapes[bone]) {
         if (!p.g) continue;
@@ -228,6 +233,7 @@
     aLa: 0.1, aLf: 0, aLt: 0, aLb: 0.12, aLz: 0, aLh: 0,   // left arm: out to the side, forward, twist; elbow forward, elbow sideways; hand
     aRa: 0.1, aRf: 0, aRt: 0, aRb: 0.12, aRz: 0, aRh: 0,
     fLx: 0, fLy: 0, fLz: 0, fLr: 0, fRx: 0, fRy: 0, fRz: 0, fRr: 0,   // feet: sideways, lift, forward, turn
+    gL: 0.15, gR: 0.15,                                     // grip: 0 an open hand, 1 a fist
     kL: 0.25, kR: 0.25, air: 0,                             // knees: how far they point outward (negative: knocked in); jump
     turn: 0,                                                // all of him, turned on the spot (a quarter turn is PI / 2; any amount is fine)
   }, fill);
@@ -268,6 +274,14 @@
     foot.world.makeRotationY(p["f" + L + "r"] * s).multiply(m2.extractRotation(foot.rest)).multiply(m1.makeRotationX(-Math.min(0.9, lift * 3.2))).setPosition(ankle);
   }
 
+  // The fingers fold in at the knuckles and the thumb comes across the palm. (Called again by follow,
+  // after it has moved the hand.)
+  const grip = { L: 0, R: 0 };
+  function fingers(L) {
+    const g = Math.min(1, Math.max(0, grip[L])), out = L === "L" ? -1 : 1;
+    child(B["fingers" + L]).multiply(rot(1.75 * g, 0, 0));
+    child(B["thumb" + L]).multiply(rot(0.7 * g, 0, out * 0.95 * g, "ZXY"));
+  }
   const px = new THREE.Vector3();
   function solve(p) {
     const w = (b) => bones[b].world;
@@ -282,6 +296,8 @@
       child(B["arm" + L]).multiply(rot(p[a + "f"], p[a + "t"], s * p[a + "a"], "ZXY"));
       child(B["fore" + L]).multiply(rot(p[a + "b"], 0, s * p[a + "z"], "ZXY"));
       child(B["hand" + L]).multiply(rot(p[a + "h"], 0, 0));
+      grip[L] = p["g" + L];
+      fingers(L);
     }
     px.setFromMatrixColumn(w(B.pelvis), 0);
     leg("L", 1, p, px);
@@ -352,6 +368,7 @@
       point(arm, fA.copy(fE).sub(fS), w);
       point(fore, fF.copy(fT).sub(fE), w);
       point(bones[B["hand" + L]], fV.fromArray(g["hand" + L]), w);
+      fingers(L);
     }
   }
 

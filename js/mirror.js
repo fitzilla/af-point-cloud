@@ -10,6 +10,7 @@
   const LIB = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.2";
   const MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
   const FACE = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+  const HANDS = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
   // the tracker's numbering (its left and right are the person's own)
   const NOSE = 0, EYE_L = 2, EYE_R = 5, EAR_L = 7, EAR_R = 8, SH_L = 11, SH_R = 12, EL_L = 13, EL_R = 14, WR_L = 15, WR_R = 16, IX_L = 19, IX_R = 20;
   const HIP_L = 23, HIP_R = 24, KN_L = 25, KN_R = 26, AN_L = 27, AN_R = 28;
@@ -33,6 +34,7 @@
       pose: { hx: 0, hy: 0, hz: 0, hrx: 0, hry: 0, hrz: 0, srx: 0, sry: 0, srz: 0, crx: 0, cry: 0, crz: 0, nrx: 0, nry: 0, nrz: 0,
         fLx: 0, fLy: 0, fLz: 0, fLr: 0, fRx: 0, fRy: 0, fRz: 0, fRr: 0, kL: 0.25, kR: 0.25, air: 0, turn: 0 },
       jaw: 0, jawWant: 0, wJaw: 0,
+      gripL: 0.15, gripR: 0.15, gripWantL: 0.15, gripWantR: 0.15, wGripL: 0, wGripR: 0, wristAtL: [0, 0], wristAtR: [0, 0],
       floor: 0, legImg: 0, back: 0, hipsLately: 0, wide: 0, turnSign: 1,
     };
   }
@@ -48,6 +50,8 @@
     const clear = (...ids) => sm(0.35, 0.65, Math.min(...ids.map(vis)));
     const quick = 1 - Math.exp(-dt * 22), slow = 1 - Math.exp(-dt * 6);
     const p = g.pose, want = {};
+    // where each wrist is in the picture, so a hand the hand tracker finds can be told from the other
+    g.wristAtL = [image[WR_R].x, image[WR_R].y]; g.wristAtR = [image[WR_L].x, image[WR_L].y];
 
     // how wide their shoulders really are (the widest they've looked), and so how big he is against them
     const wideNow = sub(at(SH_R, 1), at(SH_L, 1));
@@ -182,7 +186,8 @@
   // The camera and the tracker. `R` is the skeleton's own measurements.
   function createMirror(R) {
     const g = createGuide();
-    let faces = null, lastFace = 0, jawSeen = -9;
+    let faces = null, lastFace = 0, jawSeen = -9, hands = null, lastHands = 0;
+    const gripSeen = { L: -9, R: -9 };
     let video = null, stream = null, tracker = null, loading = null, lastFrame = -1, lastRun = 0, lastSeen = -9, fails = 0, status = "off";
 
     async function fetchTracker() {
@@ -193,6 +198,12 @@
       // their jaw is open. It's an extra: if it won't load, he copies everything else regardless.
       const face = (delegate) => vision.FaceLandmarker.createFromOptions(files, { baseOptions: { modelAssetPath: FACE, delegate }, runningMode: "VIDEO", numFaces: 1, outputFaceBlendshapes: true });
       face("GPU").catch(() => face("CPU")).then((f) => { faces = f; }, () => {});
+      // And a third watches their hands, for open or closed. Three trackers is a lot for a phone, so
+      // this one is for computers.
+      if (!(typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches)) {
+        const hand = (delegate) => vision.HandLandmarker.createFromOptions(files, { baseOptions: { modelAssetPath: HANDS, delegate }, runningMode: "VIDEO", numHands: 2 });
+        hand("GPU").catch(() => hand("CPU")).then((h) => { hands = h; }, () => {});
+      }
       try { return await make("GPU"); } catch (e) { return make("CPU"); }
     }
     // asks for the camera and shows it in `el`; throws what getUserMedia throws
@@ -245,6 +256,30 @@
             if (open) { g.jawWant = Math.min(1, Math.max(0, (open.score - 0.04) * 2.2)); jawSeen = now; }
           } catch (e) { faces = null; }      // it's only an extra: stop asking
         }
+      }
+      // their hands, twelve times a second. A fist's fingertips are about as far from the wrist as its
+      // knuckles are; an open hand's are nearly twice as far.
+      if (g.on && hands && video && video.readyState >= 2 && now - lastHands > 1 / 12) {
+        lastHands = now;
+        try {
+          const res = hands.detectForVideo(video, now * 1000 + 0.25);
+          (res.landmarks || []).forEach((lm, k) => {
+            const w3 = (res.worldLandmarks && res.worldLandmarks[k]) || lm, far = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, (a.z || 0) - (b.z || 0));
+            let open = 0;
+            for (const [tip, knuckle] of [[8, 5], [12, 9], [16, 13], [20, 17]]) open += far(w3[tip], w3[0]) / Math.max(1e-4, far(w3[knuckle], w3[0])) / 4;
+            // whose hand: whichever of his wrists it's nearer in the picture
+            const dL = Math.hypot(lm[0].x - g.wristAtL[0], lm[0].y - g.wristAtL[1]), dR = Math.hypot(lm[0].x - g.wristAtR[0], lm[0].y - g.wristAtR[1]);
+            const L = dL <= dR ? "L" : "R";
+            if (Math.min(dL, dR) > 0.2) return;
+            g["gripWant" + L] = Math.min(1, Math.max(0, (1.75 - open) / 0.65));
+            gripSeen[L] = now;
+          });
+        } catch (e) { hands = null; }      // only an extra: stop asking
+      }
+      for (const L of ["L", "R"]) {
+        const seen = g.on && now - gripSeen[L] < 0.6;
+        g["wGrip" + L] += ((seen ? 1 : 0) - g["wGrip" + L]) * Math.min(1, dt * 5);
+        g["grip" + L] += (g["gripWant" + L] - g["grip" + L]) * Math.min(1, dt * 20);
       }
       const mouth = g.on && now - jawSeen < 0.5;
       g.wJaw += ((mouth ? 1 : 0) - g.wJaw) * Math.min(1, dt * 5);

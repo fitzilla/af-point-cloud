@@ -119,6 +119,7 @@
     // the pit: barging shoulder first from side to side, fists up, stamping
     mosh(ph, p) {
       const s = Math.tanh(3 * sn(ph, 2)), h = hit(ph, 2);
+      p.gL = p.gR = 1;
       p.hx = 0.27 * s; p.fLx = 0.14 + 0.2 * s; p.fRx = -0.14 + 0.2 * s; p.fLy = 0.16 * hit(ph / 2, 3); p.fRy = 0.16 * hit(ph / 2 + 0.5, 3);
       p.crz = -0.26 * s; p.srz = -0.1 * s; p.cry = 0.3 * s; p.crx = 0.22; p.nrx = 0.3 + 0.3 * h; p.nrz = 0.15 * s;
       p.aLf = p.aRf = 0.55; p.aLb = p.aRb = 2.0 - 0.3 * h; p.aLa = p.aRa = 0.45; p.hy = -0.16 - 0.06 * h; p.kL = p.kR = 0.5; p.jaw = 0.6 * h;
@@ -147,12 +148,14 @@
     // half time: both fists right up, then brought down like a hammer on every other beat
     hammer(ph, p) {
       const h = hit(ph / 2, 4), up = 1 - h;
+      p.gL = p.gR = 1;
       p.aLf = p.aRf = 0.7 + 2.0 * up; p.aLa = p.aRa = 0.25; p.aLb = p.aRb = 0.25 + 0.5 * h;
       p.crx = -0.12 * up + 0.5 * h; p.srx = 0.2 * h; p.nrx = -0.3 * up + 0.6 * h; p.hy = -0.06 - 0.3 * h; p.jaw = 0.3 + 0.7 * h;
       p.fLx = 0.2; p.fRx = -0.2; p.kL = p.kR = 0.6; p.snap = 1;
     },
     fistPump(ph, p) {
       const h = hit(ph, 2);
+      p.gL = p.gR = 1;
       p.aRa = 1.1 + 1.5 * h; p.aRz = 0.9 * (1 - h); p.aRf = 0.2; p.aLa = 0.3; p.aLb = 0.9;
       p.hy = -0.06 - 0.07 * h; p.crz = -0.08 * h; p.nrx = 0.2 * h; p.jaw = 0.5 * h; p.fLy = 0.05 * hit(ph + 0.5, 3);
     },
@@ -427,7 +430,7 @@
   // how quickly each part catches up with where the move wants it: hips fast, hands last
   const RATE = (key) => (key === "spin" || key === "pop" || key === "air" ? 60 : key === "jaw" ? 30 : key[0] === "f" ? 22 : key[0] === "h" ? 18 : key[0] === "k" ? 10 : key[0] === "n" ? 12 : key[1] === "L" || key[1] === "R" ? (key[2] === "h" ? 9 : 13) : 14);
   // the order he's put back together in: feet first, skull last
-  const RISE = { footL: 0, footR: 0.05, shinL: 0.14, shinR: 0.19, thighL: 0.3, thighR: 0.35, pelvis: 0.46, spine: 0.56, chest: 0.66, armL: 0.8, armR: 0.84, foreL: 0.92, foreR: 0.96, handL: 1.04, handR: 1.08, neck: 1.12, head: 1.3, jaw: 1.42 };
+  const RISE = { footL: 0, footR: 0.05, shinL: 0.14, shinR: 0.19, thighL: 0.3, thighR: 0.35, pelvis: 0.46, spine: 0.56, chest: 0.66, armL: 0.8, armR: 0.84, foreL: 0.92, foreR: 0.96, handL: 1.04, handR: 1.08, fingersL: 1.06, thumbL: 1.06, fingersR: 1.1, thumbR: 1.1, neck: 1.12, head: 1.3, jaw: 1.42 };
 
   // which parts of the pose Copy me speaks for (see mirror.js)
   const TORSO = ["hx", "hz", "hrx", "hrz", "hry", "srx", "sry", "srz", "crx", "cry", "crz", "turn"], HEAD = ["nrx", "nry", "nrz"];
@@ -533,6 +536,8 @@
         for (const k of LEGS) out[k] += (gp[k] - out[k]) * g.wLegs * g.seen;
         // their mouth is his mouth: open yours and his jaw drops
         if (g.wJaw > 0.01) out.jaw += (g.jaw - out.jaw) * g.wJaw * g.seen;
+        // and their hands are his: open, or a fist
+        out.gL += (g.gripL - out.gL) * g.wGripL * g.seen; out.gR += (g.gripR - out.gR) * g.wGripR * g.seen;
       }
       // the camera's on and there's nobody there: hand to his brow, looking for them
       if (g && g.on) {
@@ -631,11 +636,11 @@
       startle() { startled = 1; },
       // name: the bone that was clicked. Returns which part of him reacted.
       poke(name) {
-        const part = /^(head|neck)/.test(name) ? "head" : name === "jaw" ? "jaw" : name === "chest" ? "chest" : /^(spine|pelvis)/.test(name) ? "pelvis" : /^(arm|fore|hand)/.test(name) ? "arm" : /^(thigh|shin)/.test(name) ? "leg" : "foot";
+        const part = /^(head|neck)/.test(name) ? "head" : name === "jaw" ? "jaw" : name === "chest" ? "chest" : /^(spine|pelvis)/.test(name) ? "pelvis" : /^(arm|fore|hand|fingers|thumb)/.test(name) ? "arm" : /^(thigh|shin)/.test(name) ? "leg" : "foot";
         const side = name.endsWith("L") ? 1 : name.endsWith("R") ? -1 : 0;
         if (fall.phase !== "up") return "";
         poked = { part, side, t: 0 };
-        if (part === "arm" && !limb) { const L = side > 0 ? "L" : "R"; limb = { bones: [B["arm" + L], B["fore" + L], B["hand" + L]], t: 0 }; }
+        if (part === "arm" && !limb) { const L = side > 0 ? "L" : "R"; limb = { bones: [B["arm" + L], B["fore" + L], B["hand" + L], B["fingers" + L], B["thumb" + L]], t: 0 }; }
         return part;
       },
       drop() { leap = 1; },
