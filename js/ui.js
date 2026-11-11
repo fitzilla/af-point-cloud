@@ -180,11 +180,8 @@
     nowEl.textContent = current.name ? `${current.name} · ${current.by}` : "Loading…";
     beat.setSong({ title: current.name ? `${current.name} ${current.by}` : "", bpm: current.bpm, vibe: current.vibe, style: current.style });
     paint();
-    try {
-      const url = new URL(location.href);
-      url.searchParams.set("v", current.id);
-      history.replaceState(null, "", url);      // so the address bar is a link to him dancing to this
-    } catch (e) { /* not allowed here: no shareable link, nothing else lost */ }
+    // (The song isn't kept in the address bar: a refresh starts from scratch. The Share button makes a
+    // link with the song in it.)
     try {
       const YT = await loadApi();
       if (wanted !== current.id) return;
@@ -234,8 +231,15 @@
     const id = videoId(e.clipboardData && e.clipboardData.getData("text"));
     if (id) { e.preventDefault(); play(SONGS.find((s) => s.id === id) || { id }, true, "paste"); }
   });
+  // Someone followed a shared link: their song is ready to play. The ?v= comes straight out of the
+  // address bar, so refreshing goes back to the start rather than to a player that may come up blank.
   const linked = videoId(params.get("v"));
-  if (linked) play(SONGS.find((s) => s.id === linked) || { id: linked }, false, "shared_link");
+  if (linked) {
+    try { const url = new URL(location.href); url.searchParams.delete("v"); history.replaceState(null, "", url); } catch (e) { /* stays: harmless */ }
+    let reloaded = false;
+    try { reloaded = performance.getEntriesByType("navigation")[0].type === "reload"; } catch (e) { /* older browser: treat as a fresh visit */ }
+    if (!reloaded) play(SONGS.find((s) => s.id === linked) || { id: linked }, false, "shared_link");
+  }
 
   // ---------- tap, and the two switches: Listen and Copy me ----------
   // A switch says, while it's off, what turning it on will use; while it's on, what it's doing.
