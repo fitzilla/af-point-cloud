@@ -252,16 +252,27 @@
       p.fLy = 0.06 * hit(ph * 0.5, 2); p.fRy = 0.06 * hit(ph * 0.5 + 0.5, 2); p.hy = -0.05; p.crx = 0.12; p.nrx = 0.2;
       p.aLf = 0.3 * sn(ph, 2); p.aRf = -0.3 * sn(ph, 2); p.aRa = 0.2;
     },
-    // arms out, palms up, shoulders, head, hips, bum, wiggle, hop
+    // The Macarena, all sixteen counts: arms out one at a time, palms flipped up, hands to shoulders,
+    // to the back of the head, across to the hips, onto the bum, three wiggles, and a jump with a clap
+    // for the "hey!". The left arm does everything a beat after the right.
     macarena(ph, p) {
-      const step = Math.floor(ph) % 16;
-      const POSE = { fwd: [0.1, 1.5, 0.05, 0], cross: [-0.3, 1.0, 1.9, 0], head: [2.1, 0, 0, -2.2], hip: [-0.45, 0.5, 0.7, 0], bum: [0.5, -0.2, 0, -1.3] };
-      const at = (n) => (n < 0 ? null : n < 4 ? POSE.fwd : n < 6 ? POSE.cross : n < 8 ? POSE.head : n < 10 ? POSE.hip : POSE.bum);
-      const set = (L, v) => { if (v) { p["a" + L + "a"] = v[0]; p["a" + L + "f"] = v[1]; p["a" + L + "b"] = v[2]; p["a" + L + "z"] = v[3]; } };
+      const step = Math.floor(ph) % 16, f = fr(ph);
+      //            out to side, forward, elbow bend, elbow sideways, hand
+      // (the arms go out a little wide of straight ahead, or from the front there'd be nothing to see)
+      const POSE = { out: [0.55, 1.15, 0.05, 0, 0], palm: [0.55, 1.2, 0.05, 0, -1.2], cross: [0.1, 0.55, 0, -2.4, 0], head: [2.5, 0, 0, 2.2, 0], hip: [-0.45, 0.5, 0.7, 0, 0], bum: [0.5, -0.25, 0, -1.3, 0] };
+      const at = (n) => (n < 0 ? null : n < 2 ? POSE.out : n < 4 ? POSE.palm : n < 6 ? POSE.cross : n < 8 ? POSE.head : n < 10 ? POSE.hip : POSE.bum);
+      const set = (L, v) => { if (v) { p["a" + L + "a"] = v[0]; p["a" + L + "f"] = v[1]; p["a" + L + "b"] = v[2]; p["a" + L + "z"] = v[3]; p["a" + L + "h"] = v[4]; } };
       set("R", at(step)); set("L", at(step - 1));
-      p.snap = 1; p.hy = -0.05 - 0.04 * hit(ph);
-      if (step >= 12 && step < 15) { p.hx = 0.1 * sn(ph, 1); p.hrz = 0.15 * sn(ph, 1); }
-      if (step === 15) { p.air = 0.16 * Math.sin(Math.PI * fr(ph)); p.jaw = 0.6; }
+      p.snap = 1; p.hy = -0.05 - 0.05 * hit(ph); p.kL = p.kR = 0.35; p.nry = step < 12 ? (step % 2 ? 0.25 : -0.25) : 0;
+      if (step >= 12 && step < 15) {          // the wiggle: hips right round, knees soft
+        const w = sn(ph, 1);
+        p.hx = 0.15 * w; p.hrz = 0.22 * w; p.srz = -0.14 * w; p.hry = 0.2 * sn(ph, 1, 0.25); p.hy = -0.14; p.nrz = 0.1 * w; p.jaw = 0.3;
+      }
+      if (step === 15) {                      // hey!
+        const up = Math.sin(Math.PI * f);
+        p.air = 0.22 * up; p.jaw = 1; p.nrx = -0.3;
+        p.aLa = p.aRa = 2.45; p.aLz = p.aRz = 0.35 * (1 - hit(ph + 0.5, 2)); p.aLf = p.aRf = 0; p.aLb = p.aRb = 0; p.aLh = p.aRh = 0;
+      }
     },
     // riding an invisible horse, then swinging an invisible lasso
     gangnam(ph, p) {
@@ -336,6 +347,8 @@
       p.kL = p.kR = 0.6; p.fLx = 0.1; p.fRx = -0.1; p.aLa = p.aRa = 0.4; p.aLb = p.aRb = 1.3; p.aLf = p.aRf = 0.5 - 1.0 * h; p.jaw = 0.4 * h;
     },
   };
+  // routines that run longer than the usual eight beats
+  const SPAN = { macarena: 16 };
   // how hard each one goes, 0 to 1: quiet passages get the low ones and loud ones the high
   const HEAT = {
     sway: 0.2, nodSnap: 0.25, armWave: 0.3, hipSway: 0.4, stepTouch: 0.4, rickSway: 0.45, moonwalk: 0.45, sideClap: 0.5, bounce: 0.5, robot: 0.5,
@@ -394,13 +407,17 @@
     const names = Object.keys(B);
     let cur = "sway", prev = "sway", curStart = 0, phrase = -1, live = 0, startled = 0, talking = 0, tada = 0, leap = 0, statue = 0, wasGoing = false, vigour = 0;
     const lately = [];
-    let poked = null, limb = null;
+    let poked = null, limb = null, dbNow = 0, sigRuns = 0;
     let fall = { phase: "up", t: 0 }, landed = false, pinned = false;
 
     // The next dance: one that suits the kind of music, as lively as the music is right now, and not one
     // he's just done. A song with a dance of its own (Y.M.C.A., Thriller...) gets it every third phrase.
     function choose(c, n) {
-      if (c.signature && MOVES[c.signature] && n % 2 === 0 && cur !== c.signature) return c.signature;
+      // (A long routine is what its song is for: it's danced twice through before anything else gets a
+      // turn. Moves count from the song's beat, so it only ever starts on an even phrase, at count one.)
+      const sig = c.signature;
+      if (sig && MOVES[sig] && n % 2 === 0 && (cur !== sig || (SPAN[sig] && sigRuns < 2))) { sigRuns = cur === sig ? sigRuns + 1 : 1; return sig; }
+      sigRuns = 0;
       const pool = STYLES[c.style] || STYLES.pop;
       // phrases build like a song does: a bit more each time, biggest on the fourth
       const want = Math.min(1, c.energy * [0.85, 1, 0.92, 1.15][((n % 4) + 4) % 4]);
@@ -427,7 +444,10 @@
       // very fast songs are danced at half speed, very slow ones at double
       const db = c.beat * (c.bpm > 150 ? 0.5 : c.bpm < 72 ? 2 : 1);
       const n = Math.floor(db / 8);
-      if (c.going && !pinned && n !== phrase) {
+      dbNow = db;
+      // (a routine longer than one phrase is danced through to its end before anything else is picked)
+      const midway = SPAN[cur] && db >= curStart && db - curStart < SPAN[cur] - 0.01;
+      if (c.going && !pinned && n !== phrase && !midway) {
         phrase = n;
         prev = cur;
         cur = choose(c, n);
@@ -584,7 +604,7 @@
       drop() { leap = 1; },
       talk() { talking = 1; },
       get move() { return cur; },
-      set move(name) { pinned = !!MOVES[name]; if (pinned) { prev = cur; cur = name; } },     // for trying one move out: it stays until set to ""
+      set move(name) { pinned = !!MOVES[name]; if (pinned) { prev = cur; cur = name; curStart = dbNow; } },     // for trying one move out: it stays until set to ""
       moves: Object.keys(MOVES),
     };
   };

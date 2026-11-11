@@ -22,6 +22,7 @@
     { id: "fNFzfwLM72c", name: "Stayin’ Alive", style: "disco", by: "Bee Gees", bpm: 104, vibe: "groove" },
     { id: "sOnqjkJTMaA", name: "Thriller", style: "spooky", by: "Michael Jackson", bpm: 118, vibe: "groove" },
     { id: "Gs069dndIYk", name: "September", style: "disco", by: "Earth, Wind & Fire", bpm: 126, vibe: "groove" },
+    { id: "zWaymcVmJ-A", name: "Macarena", style: "latin", by: "Los Del Río", bpm: 103, vibe: "groove" },
     { id: "dQw4w9WgXcQ", name: "Never Gonna Give You Up", style: "pop", by: "Rick Astley", bpm: 113, vibe: "groove" },
     { id: "OPf0YbXqDm0", name: "Uptown Funk", style: "disco", by: "Mark Ronson", bpm: 115, vibe: "groove" },
     { id: "v2AC41dglnM", name: "Thunderstruck", style: "rock", by: "AC/DC", bpm: 134, vibe: "hype" },
