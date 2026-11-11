@@ -304,7 +304,8 @@
       if (sp > 16.0) v *= 16.0 / sp;
 
       // damage: dust knocked loose by the beat, healing slowly
-      dmg += uKick * uKick * r * (1.0 - glyph) * uDt * 5.0;
+      // (the beat only shakes the dust so far: past that he'd stop looking like a skeleton)
+      dmg = max(dmg, min(dmg + uKick * uKick * r * (1.0 - glyph) * uDt * 5.0, 0.7));
       dmg -= uDt * mix(0.9, 0.12, clamp(inst, 0.0, 1.0));
       gl_FragColor = vec4(v, clamp(dmg, 0.0, 1.5));
     }
@@ -612,7 +613,7 @@
   // ---------- interaction state ----------
   const pointer = { ndc: new THREE.Vector2(9, 9), inside: false, lx: 0, ly: 0, lt: 0 };
   const st = {
-    energy: 0, lastMove: -10, clickBoom: 0, pulse: 0, peak: 0, loose: 0, lastHit: null, parX: 0, parY: 0,
+    energy: 0, pounding: 0, lastMove: -10, clickBoom: 0, pulse: 0, peak: 0, loose: 0, lastHit: null, parX: 0, parY: 0,
   };
   const overUI = (e) => e.target instanceof Element && !!e.target.closest(".dock, .card, #tube, #cam, #corner");
 
@@ -856,7 +857,7 @@
     const drive = bs.going ? bs.energy : 0;
     const energy = Math.max(st.energy, drive * 0.16 + (hearing ? bs.bass * 0.1 : 0));
     // the clock's beat, or a drum he really heard, whichever is hitting harder
-    const kick = bs.going ? Math.max(bs.kick * (0.35 + 0.65 * bs.energy), hearing ? bs.hit * (0.4 + 0.6 * bs.bass) : 0) * (1 - 0.6 * Math.min(1, st.energy)) : 0;
+    let kick = bs.going ? Math.max(bs.kick * (0.35 + 0.65 * bs.energy), hearing ? bs.hit * (0.4 + 0.6 * bs.bass) : 0) * (1 - 0.6 * Math.min(1, st.energy)) : 0;
     if (bs.going && bs.kick > 0.97) st.pulse = Math.max(st.pulse, 0.1 + 0.2 * bs.energy);
     if (bs.going && bs.bar > 0.97) {
       st.pulse = Math.max(st.pulse, 0.3 + 0.5 * bs.energy);
@@ -870,6 +871,10 @@
     vu.uTime.value = t; vu.uDt.value = dt; vu.uEnergy.value = energy; vu.uLoose.value = st.loose;
     st.clickBoom *= Math.exp(-dt * 6);
     vu.uClick.value = st.clickBoom;
+    // Heavy music hits almost without a gap. Each hit still lands, but a run of them counts for less,
+    // so he stays readable in the thick of it.
+    st.pounding += (kick - st.pounding) * Math.min(1, dt * 1.2);
+    kick *= 1 - 0.45 * Math.min(1, st.pounding * 1.8);
     vu.uKick.value = kick; vu.uBass.value = hearing ? bs.bass * bs.heard : 0;
     posMat.uniforms.uDt.value = dt;
     const pt = ptMat.uniforms;
