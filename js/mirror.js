@@ -28,6 +28,7 @@
     return {
       on: false, seen: 0, wArmL: 0, wArmR: 0, wLegs: 0, wTorso: 0, wHead: 0,
       armL: down(), foreL: down(), handL: down(), armR: down(), foreR: down(), handR: down(),
+      wristL: [0, 0, 0], wristR: [0, 0, 0], wristHeadL: [0, 0, 0], wristHeadR: [0, 0, 0], nearHeadL: 0, nearHeadR: 0, wWristL: 0, wWristR: 0,
       pose: { hx: 0, hy: 0, hz: 0, hrx: 0, hry: 0, hrz: 0, srx: 0, sry: 0, srz: 0, crx: 0, cry: 0, crz: 0, nrx: 0, nry: 0, nrz: 0,
         fLx: 0, fLy: 0, fLz: 0, fLr: 0, fRx: 0, fRy: 0, fRz: 0, fRr: 0, kL: 0.25, kR: 0.25, air: 0, turn: 0 },
       floor: 0, legImg: 0, back: 0, hipsLately: 0, wide: 0, turnSign: 1,
@@ -46,22 +47,44 @@
     const quick = 1 - Math.exp(-dt * 22), slow = 1 - Math.exp(-dt * 6);
     const p = g.pose, want = {};
 
-    // arms: his left follows their right
+    // how wide their shoulders really are (the widest they've looked), and so how big he is against them
+    const wideNow = sub(at(SH_R, 1), at(SH_L, 1));
+    g.wide = Math.max(len(wideNow), g.wide * Math.exp(-dt / 40));
+    const size = R.shoulders / Math.max(0.15, g.wide);
+
+    // Arms: his left follows their right. Which way each bone points is one thing; but his arms aren't
+    // their arms, so pointing alone never quite brings his hands together when theirs clap, or onto his
+    // head when theirs are on theirs. So each wrist is also given as a place: where theirs is from the
+    // middle of their shoulders, and from their head when it's near it, both in his size. rig.follow
+    // bends his arm to put his wrist there.
+    const mids = mid(at(SH_R), at(SH_L)), crown = mid(at(EAR_R), at(EAR_L));
+    // A clap: the tracker leaves a gap between two wrists whose palms are together, so as they close
+    // on each other his are drawn the rest of the way to the middle.
+    const clap = sm(0.2, 0.09, len(sub(at(WR_R), at(WR_L)))), palms = mid(at(WR_R), at(WR_L));
+    const turn = (have, to) => { for (let i = 0; i < 3; i++) have[i] += (to[i] - have[i]) * quick; };
+    const hands = {};
     for (const [L, sh, el, wr, ix] of [["L", SH_R, EL_R, WR_R, IX_R], ["R", SH_L, EL_L, WR_L, IX_L]]) {
-      const S = at(sh), E = at(el), Wr = at(wr), fore = unit(sub(Wr, E)), finger = unit(sub(at(ix), Wr));
-      const turn = (have, to) => { for (let i = 0; i < 3; i++) have[i] += (to[i] - have[i]) * quick; };
+      const S = at(sh), E = at(el), fore = unit(sub(at(wr), E)), finger = unit(sub(at(ix), at(wr)));
+      const Wr = at(wr).map((x, i) => x + (palms[i] - x) * clap * 0.85);
       turn(g["arm" + L], unit(sub(E, S)));
       turn(g["fore" + L], fore);
-      turn(g["hand" + L], unit([fore[0] + finger[0] * 0.6, fore[1] + finger[1] * 0.6, fore[2] + finger[2] * 0.6]));
+      hands[L] = unit([fore[0] + finger[0] * 0.6, fore[1] + finger[1] * 0.6, fore[2] + finger[2] * 0.6]);
+      turn(g["wrist" + L], sub(Wr, mids).map((x) => x * size));
+      // (and a hand on their head is a wrist a hand's length from it: his is brought in to his skull)
+      const fromHead = sub(Wr, crown), far = len(fromHead), reach = far * size, onHead = sm(0.27, 0.17, far);
+      turn(g["wristHead" + L], fromHead.map((x) => (x * size * (reach - onHead * Math.max(0, reach - 0.25))) / Math.max(1e-3, reach)));
+      g["nearHead" + L] += (sm(0.42, 0.2, far) * clear(EAR_L, EAR_R) - g["nearHead" + L]) * quick;
       g["wArm" + L] += (clear(sh, el) - g["wArm" + L]) * slow;
+      g["wWrist" + L] += (clear(wr) - g["wWrist" + L]) * slow;
     }
+    // palms together point the same way, or his hands would cross like scissors
+    const both = unit([hands.L[0] + hands.R[0], hands.L[1] + hands.R[1], hands.L[2] + hands.R[2]]);
+    for (const L of ["L", "R"]) turn(g["hand" + L], unit(hands[L].map((x, i) => x + (both[i] - x) * clap)));
 
     // Which way they're facing. Depth is the tracker's weakest guess, so this goes by something it sees
     // well: how narrow their shoulders look against how wide they really are. Square on, they're full
     // width; side on, no width at all; back to the camera, full width the other way round. Depth only
     // has to say which way they turned. Small turns are left to the hips and chest, below.
-    const wideNow = sub(at(SH_R, 1), at(SH_L, 1));
-    g.wide = Math.max(len(wideNow), g.wide * Math.exp(-dt / 40));
     const level = Math.sqrt(Math.max(1e-4, g.wide * g.wide - wideNow[1] * wideNow[1]));
     const round = Math.max(0, Math.acos(clamp(wideNow[0] / level, -1, 1)) - 0.45) * (Math.PI / (Math.PI - 0.45));
     if (Math.abs(wideNow[2]) > 0.15 * g.wide) g.turnSign = wideNow[2] > 0 ? -1 : 1;

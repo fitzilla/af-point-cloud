@@ -608,7 +608,7 @@
   // Copy me: the webcam (see mirror.js), told how big he is so it can put his feet where theirs are
   const mirror = (SK.mirror = SK.mirrorKit.createMirror({
     leg: rig.bones[rig.B.thighL].len + rig.bones[rig.B.shinL].len, hipX: rig.J.hip[0], hipY: rig.J.hip[1],
-    ankleX: rig.J.ankle[0], ankleY: rig.J.ankle[1], torso: rig.J.shoulder[1] - rig.J.hip[1],
+    ankleX: rig.J.ankle[0], ankleY: rig.J.ankle[1], torso: rig.J.shoulder[1] - rig.J.hip[1], shoulders: rig.J.shoulder[0] * 2,
   }));
 
   // ---------- interaction state ----------

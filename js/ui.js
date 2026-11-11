@@ -231,19 +231,10 @@
     const id = videoId(e.clipboardData && e.clipboardData.getData("text"));
     if (id) { e.preventDefault(); play(SONGS.find((s) => s.id === id) || { id }, true, "paste"); }
   });
-  // Someone followed a shared link: their song is ready to play. The ?v= comes straight out of the
-  // address bar, so refreshing goes back to the start rather than to a player that may come up blank.
-  const linked = videoId(params.get("v"));
-  if (linked) {
-    try { const url = new URL(location.href); url.searchParams.delete("v"); history.replaceState(null, "", url); } catch (e) { /* stays: harmless */ }
-    let reloaded = false;
-    try { reloaded = performance.getEntriesByType("navigation")[0].type === "reload"; } catch (e) { /* older browser: treat as a fresh visit */ }
-    if (!reloaded) play(SONGS.find((s) => s.id === linked) || { id: linked }, false, "shared_link");
-  }
 
-  // ---------- tap, and the two switches: Listen and Copy me ----------
+  // ---------- the two switches: Listen and Copy me (Enter still taps the beat, for anyone who knows) ----------
   // A switch says, while it's off, what turning it on will use; while it's on, what it's doing.
-  const songBtn = $("song"), tapBtn = $("tap"), dockEl = $("dock"), put = (el, text) => { if (el.textContent !== text) el.textContent = text; };
+  const songBtn = $("song"), dockEl = $("dock"), put = (el, text) => { if (el.textContent !== text) el.textContent = text; };
   const listenBtn = $("listen"), listenSay = $("listen-say"), listenNote = $("listen-note");
   // sharing a tab's sound is a desktop Chrome and Edge thing; elsewhere the switch goes straight to the mic
   const canTab = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) && !matchMedia("(pointer: coarse)").matches;
@@ -252,7 +243,6 @@
   let listenMsg = "", listenUntil = 0, asking = false;
   function sayListen(text, secs) { listenMsg = text; listenUntil = performance.now() + secs * 1000; paint(); }
   function paint() {
-    put(tapBtn.querySelector("b"), String(Math.round(bs.bpm)));
     const on = !!bs.listening;
     listenBtn.setAttribute("aria-checked", String(on));
     listenBtn.setAttribute("aria-busy", String(asking || (on && !bs.locked)));
@@ -279,12 +269,8 @@
     beat.tap(performance.now() / 1000);
     // no song? tapping is enough to get him going
     if (!bs.playing && !bs.listening) { bs.playing = true; clearTimeout(tap.rest); tap.rest = setTimeout(() => { if (!player || player.getPlayerState() !== 1) bs.playing = false; }, 12000); }
-    tapBtn.classList.remove("hit");
-    void tapBtn.offsetWidth;
-    tapBtn.classList.add("hit");
     paint();
   }
-  tapBtn.addEventListener("click", () => { tap(); tapBtn.blur(); });
   // via: where it was switched on from (card = the choice of mic or tab, switch = straight from the switch)
   async function listen(kind, via) {
     asking = true;
@@ -424,4 +410,16 @@
   for (const id in NETWORKS) $(id).addEventListener("click", () => shared(id.slice(6)));
 
   SK.ui = { tap, acted, play, videoId, visitors, songs: SONGS };
+
+  // (Last of all, once everything above exists: playing a song repaints the dock.)
+  // Someone followed a shared link: their song is ready to play. The ?v= comes straight out of the
+  // address bar, so refreshing goes back to the start rather than to a player that may come up blank.
+  const linked = videoId(params.get("v"));
+  if (linked) {
+    try { const url = new URL(location.href); url.searchParams.delete("v"); history.replaceState(null, "", url); } catch (e) { /* stays: harmless */ }
+    let reloaded = false;
+    try { reloaded = performance.getEntriesByType("navigation")[0].type === "reload"; } catch (e) { /* older browser: treat as a fresh visit */ }
+    if (!reloaded) play(SONGS.find((s) => s.id === linked) || { id: linked }, false, "shared_link");
+  }
+
 })();

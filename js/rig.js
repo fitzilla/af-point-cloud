@@ -296,11 +296,12 @@
   }
 
   // ---------- copying someone ----------
-  // Copy me (mirror.js) says which way each arm bone should point. The pose has already put him
-  // somewhere; this turns each arm from there toward where it's told, as far as `w` trusts it.
+  // Copy me (mirror.js) says which way each arm bone points and where each wrist is. The pose has
+  // already put him somewhere; this moves each arm from there toward what it's told, as far as `w`
+  // trusts it.
   const fq = new THREE.Quaternion(), fw = new THREE.Quaternion(), fx = new THREE.Vector3(), end = new THREE.Vector3();
   function point(bone, want, w) {
-    ty.fromArray(want).normalize();
+    ty.copy(want).normalize();
     // its front faces us where it can; a bone pointing straight at us keeps the side it already had
     tx.crossVectors(ty, Z);
     const flat = tx.lengthSq();
@@ -313,14 +314,44 @@
     bone.world.makeRotationFromQuaternion(fq).setPosition(end);
     end.addScaledVector(ty.setFromMatrixColumn(bone.world, 1), bone.len);      // the next bone starts where this one stops
   }
+  const fS = new THREE.Vector3(), fT = new THREE.Vector3(), fE = new THREE.Vector3(), fD = new THREE.Vector3(), fA = new THREE.Vector3(), fF = new THREE.Vector3();
+  const fPole = new THREE.Vector3(), fMid = new THREE.Vector3(), fHead = new THREE.Vector3(), fV = new THREE.Vector3();
   function follow(g) {
+    // the middle of his shoulders and the middle of his skull: what the wrists are measured from
+    fMid.setFromMatrixPosition(bones[B.armL].world).add(fV.setFromMatrixPosition(bones[B.armR].world)).multiplyScalar(0.5);
+    fHead.set(0, 0.24, 0).applyMatrix4(bones[B.head].world);
     for (const L of ["L", "R"]) {
       const w = g["wArm" + L] * g.seen;
       if (w < 0.004) continue;
-      end.setFromMatrixPosition(bones[B["arm" + L]].world);
-      point(bones[B["arm" + L]], g["arm" + L], w);
-      point(bones[B["fore" + L]], g["fore" + L], w);
-      point(bones[B["hand" + L]], g["hand" + L], w);
+      const arm = bones[B["arm" + L]], fore = bones[B["fore" + L]];
+      fS.setFromMatrixPosition(arm.world);
+      fA.fromArray(g["arm" + L]).normalize();
+      fF.fromArray(g["fore" + L]).normalize();
+      // where pointing alone would leave his wrist; then, as far as their wrist can be seen, where it
+      // really is: hands that meet, meet, and a hand on the head lands on his
+      fT.copy(fS).addScaledVector(fA, arm.len).addScaledVector(fF, fore.len);
+      const ww = g["wWrist" + L] || 0;
+      if (ww > 0.01) {
+        fV.fromArray(g["wrist" + L]).add(fMid);
+        fV.lerp(fD.fromArray(g["wristHead" + L]).add(fHead), g["nearHead" + L] || 0);
+        fT.lerp(fV, ww);
+      }
+      // two bones to reach it, the elbow leaning the way theirs does
+      fD.copy(fT).sub(fS);
+      let dist = fD.length();
+      if (dist < 1e-4) { fD.set(0, -1, 0); dist = 1; }
+      fD.divideScalar(dist);
+      dist = Math.min(arm.len + fore.len - 0.004, Math.max(Math.abs(arm.len - fore.len) + 0.03, dist));
+      const along = (arm.len * arm.len - fore.len * fore.len + dist * dist) / (2 * dist), off = Math.sqrt(Math.max(0, arm.len * arm.len - along * along));
+      fPole.copy(fA).addScaledVector(fD, -fA.dot(fD));
+      if (fPole.lengthSq() < 1e-4) { fPole.set(L === "L" ? 0.5 : -0.5, -0.6, -0.6); fPole.addScaledVector(fD, -fPole.dot(fD)); }
+      fPole.normalize();
+      fE.copy(fS).addScaledVector(fD, along).addScaledVector(fPole, off);
+      fT.copy(fS).addScaledVector(fD, dist);
+      end.copy(fS);
+      point(arm, fA.copy(fE).sub(fS), w);
+      point(fore, fF.copy(fT).sub(fE), w);
+      point(bones[B["hand" + L]], fV.fromArray(g["hand" + L]), w);
     }
   }
 
