@@ -93,7 +93,7 @@
   // Songs that come with a dance of their own.
   const SIGNATURE = [
     [/y\.?m\.?c\.?a/i, "ymca"], [/thriller/i, "zombie"], [/gangnam/i, "gangnam"], [/macarena/i, "macarena"], [/never gonna give you up|rick astley/i, "rickSway"],
-    [/stayin.? alive|saturday night fever/i, "discoPoint"], [/egyptian/i, "egyptian"], [/\btwist\b/i, "twist"], [/robot|daft punk|kraftwerk/i, "robot"],
+    [/stayin.? alive|saturday night fever|bee gees/i, "stayinAlive"], [/egyptian/i, "egyptian"], [/\btwist\b/i, "twist"], [/robot|daft punk|kraftwerk/i, "robot"],
     [/spooky scary/i, "rattle"], [/sandstorm/i, "fistPump"], [/floss/i, "floss"], [/billie jean|smooth criminal|moonwalk/i, "moonwalk"], [/charleston/i, "charleston"],
     [/can.?can/i, "kicks"], [/griddy/i, "griddy"], [/mr\.? ?bean/i, "bean"], [/friends|the routine|ross and monica/i, "routine"], [/hip thrust|pelvic thrust|time warp/i, "hipThrust"], [/\bjump\b/i, "pogo"], [/bohemian|headbang/i, "headbang"], [/monster mash/i, "zombie"],
   ];

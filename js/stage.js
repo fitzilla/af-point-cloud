@@ -573,7 +573,7 @@
 
   // The camera keeps all of him in shot: close while he stands, pulling back as his arms go up or he
   // jumps, and on a tall screen it's how wide he is that sets the distance.
-  const view = { top: 2.0, half: 1.2, y: 0.08, dist: 0 }, reachP = new THREE.Vector3();
+  const view = { top: 2.0, half: 1.2, y: 0.08, dist: 0, cover: 0 }, reachP = new THREE.Vector3();
   function frameHim(k) {
     let top = 1.95, half = 0.75;
     for (const [bone, len] of [[rig.B.head, 0.5], [rig.B.handL, 0.3], [rig.B.handR, 0.3], [rig.B.footL, 0.3], [rig.B.footR, 0.3]]) {
@@ -584,9 +584,12 @@
     view.top += (top - view.top) * (top > view.top ? Math.min(1, k * 3) : k * 0.4);
     view.half += (half - view.half) * (half > view.half ? Math.min(1, k * 3) : k * 0.4);
     const bottom = rig.FLOOR - 0.44, tall = (view.top - bottom) / 2 + 0.08;
-    view.y = bottom + tall - 0.04;
+    // on a narrow screen the player sits over the bottom of the picture (ui.js says how much):
+    // he backs off and moves up to dance in what's left, rather than behind it
+    view.cover += ((SK.cover || 0) - view.cover) * Math.min(1, k * 2);
     // on a tall phone screen he's kept big, and lets a flung-out arm leave the picture
-    view.dist = Math.max(tall / TF, Math.min(view.half, 1.3) / (TF * camera.aspect));
+    view.dist = Math.max(tall / (TF * (1 - view.cover)), Math.min(view.half, 1.3) / (TF * camera.aspect));
+    view.y = bottom + tall - 0.04 - view.cover * view.dist * TF;
     camera.position.set(0, view.y + 0.34, view.dist);
     camera.lookAt(0, view.y, 0);
     ptMat.uniforms.uCamDist.value = view.dist;

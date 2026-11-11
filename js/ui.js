@@ -137,9 +137,6 @@
     tube.hidden = true;
   }
   $("tube-close").addEventListener("click", stopSong);
-  // he keeps time by tempo until he's allowed to hear: the offer sits under the player
-  $("tube-listen").addEventListener("click", () => show($("card-listen")));
-
   const list = $("songs");
   for (const song of SONGS) {
     const b = document.createElement("button");
@@ -169,12 +166,32 @@
 
   // ---------- tap, listen ----------
   const tapBtn = $("tap"), listenBtn = $("listen"), listenNote = $("listen-note");
+  // He can't hear YouTube's player, so under it sits the offer to let him listen: one press, then the
+  // browser's own permission question. "Not now" folds it down to a single quiet line for the visit.
+  const askEl = $("tube-ask"), askNote = $("ask-note"), quietEl = $("tube-listen"), heardEl = $("tube-heard");
+  const tabBtn = $("listen-tab"), askTab = $("ask-tab");
+  // sharing a tab's sound is a desktop Chrome and Edge thing
+  const canTab = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) && !matchMedia("(pointer: coarse)").matches;
+  const ASK_NOTE = canTab ? "Headphones on? Use tab sound. Nothing is recorded." : "Turn the music up. Nothing is recorded.";
+  let later = false;
+  tabBtn.hidden = askTab.hidden = !canTab;
+  if (!navigator.mediaDevices) listenBtn.hidden = true;
+  askNote.textContent = ASK_NOTE;
+  const put = (el, text) => { if (el.textContent !== text) el.textContent = text; };
   function paint() {
-    tapBtn.lastElementChild.textContent = `Tap · ${Math.round(bs.bpm)}`;
+    put(tapBtn.lastElementChild, `Tap · ${Math.round(bs.bpm)}`);
     listenBtn.setAttribute("aria-pressed", String(!!bs.listening));
-    listenBtn.lastElementChild.textContent = bs.listening ? (bs.locked ? "Listening" : "Listening…") : "Listen";
+    put(listenBtn.lastElementChild, bs.listening ? (bs.locked ? "Listening" : "Listening…") : "Listen");
     $("listen-off").hidden = !bs.listening;
-    $("tube-listen").hidden = !!bs.listening || listenBtn.hidden;
+    const can = !listenBtn.hidden, deaf = !bs.listening;
+    askEl.hidden = !(can && deaf && !later);
+    quietEl.hidden = !(can && deaf && later);
+    heardEl.hidden = deaf;
+    put(heardEl, bs.locked ? "He can hear it. He’s on the real beat." : "Listening for the beat…");
+    // where the player reaches the middle of a narrow screen, tell the stage how much of the picture
+    // it covers, so he dances above it
+    const box = tube.hidden ? null : tube.getBoundingClientRect();
+    SK.cover = box && box.right > innerWidth * 0.5 ? Math.min(0.6, Math.max(0, 1 - box.top / innerHeight)) : 0;
   }
   function tap() {
     beat.tap(performance.now() / 1000);
@@ -186,25 +203,27 @@
     paint();
   }
   tapBtn.addEventListener("click", () => { tap(); tapBtn.blur(); });
-  async function listen(kind) {
-    listenNote.textContent = kind === "tab" ? "Choose this tab, and tick “also share tab audio”." : "Allow the microphone, and turn the music up.";
+  const tell = (text) => { listenNote.textContent = text; askNote.textContent = text || ASK_NOTE; };
+  // via: where it was asked from (prompt = under the player, card = the Listen control)
+  async function listen(kind, via) {
+    tell(kind === "tab" ? "Choose this tab, and tick “also share tab audio”." : "Allow the microphone, and turn the music up.");
     try {
       await beat.listen(kind);
-      listenNote.textContent = "He’s listening. Nothing is recorded or sent anywhere.";
-      SK.track("listen_started", { kind });
+      tell("He’s listening. Nothing is recorded or sent anywhere.");
+      SK.track("listen_started", { kind, via });
       show(null);
     } catch (e) {
-      listenNote.textContent = e && e.name === "NotAllowedError" ? "No permission, so he can’t hear. He’ll keep time by tempo." : (e && e.message) || "That didn’t work.";
+      tell(e && e.name === "NotAllowedError" ? "No permission, so he can’t hear. He’ll keep guessing." : (e && e.message) || "That didn’t work.");
     }
     paint();
   }
-  $("listen-mic").addEventListener("click", () => listen("mic"));
-  const tabBtn = $("listen-tab");
-  // sharing a tab's sound is a desktop Chrome and Edge thing
-  if (!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) || matchMedia("(pointer: coarse)").matches) tabBtn.hidden = true;
-  tabBtn.addEventListener("click", () => listen("tab"));
-  $("listen-off").addEventListener("click", () => { beat.stop(); listenNote.textContent = ""; paint(); show(null); });
-  if (!navigator.mediaDevices) listenBtn.hidden = true;
+  $("listen-mic").addEventListener("click", () => listen("mic", "card"));
+  tabBtn.addEventListener("click", () => listen("tab", "card"));
+  $("ask-mic").addEventListener("click", () => listen("mic", "prompt"));
+  askTab.addEventListener("click", () => listen("tab", "prompt"));
+  $("ask-later").addEventListener("click", () => { later = true; SK.track("listen_prompt_dismissed", {}); paint(); });
+  quietEl.addEventListener("click", () => { later = false; tell(""); paint(); });
+  $("listen-off").addEventListener("click", () => { beat.stop(); tell(""); paint(); show(null); });
   setInterval(paint, 500);
   paint();
 

@@ -38,6 +38,25 @@
       p.fLr = 0.35 * w; p.fRr = -0.35 * w; p.nry = -0.2 * w;
       p.aLf = 0.55 + 0.35 * w; p.aRf = 0.55 - 0.35 * w; p.aLb = p.aRb = 1.35; p.aLa = p.aRa = 0.35;
     },
+    // Saturday Night Fever, the whole bit: point at the sky, point at the floor, twice over; roll the
+    // arms; then hold the point for the "ah, ah, ah, ah"
+    stayinAlive(ph, p) {
+      const c = ph % 8, h = hit(ph);
+      p.snap = 1; p.hy = -0.06 - 0.05 * h; p.kL = p.kR = 0.35;
+      p.aLa = 0.75; p.aLz = -1.75; p.aLb = 0.2;                       // left hand planted on the hip
+      if (c >= 4 && c < 6) {
+        const s = sn(ph, 2);
+        p.aLz = 0; p.aLf = p.aRf = 1.0; p.aLa = p.aRa = 0.12; p.aLb = 1.6 + 0.55 * sn(ph, 0.5); p.aRb = 1.6 - 0.55 * sn(ph, 0.5);
+        p.hx = 0.1 * s; p.hrz = -0.1 * s; p.crz = 0.14 * s; p.nrz = 0.1 * s; p.crx = 0.12; p.jaw = 0.25;
+        return;
+      }
+      const hold = c >= 6, up = hold || Math.floor(c) % 2 === 0, d = up ? 1 : -1, ah = hold ? hit(ph * 2, 2) : 0;
+      p.aRa = up ? 2.5 : -1.0; p.aRf = up ? 0 : 0.6; p.aRb = up ? 0 : 0.1; p.aRh = 0.5 * ah;
+      p.hx = 0.16 * d; p.hrz = -0.2 * d; p.srz = 0.16 * d; p.crz = up ? 0.06 : -0.14; p.cry = up ? -0.15 : 0.4; p.hz = 0.07 * ah;
+      p.fLx = 0.14; p.fRx = -0.14; p.hy = (up ? -0.04 : -0.14) - 0.04 * h;
+      p.nry = -0.5 * d; p.nrx = up ? -0.2 : 0.3; p.fRy = up ? 0 : 0.05; p.kR = up ? 0.35 : -0.1;
+      p.jaw = hold ? 0.75 * ah : 0.3 * hit(ph, 4);
+    },
     // one arm to the sky, the other on his hip: Saturday night
     discoPoint(ph, p) {
       const k = 0.5 - 0.5 * Math.cos(Math.PI * ph), d = 2 * k - 1;
@@ -279,12 +298,12 @@
     sway: 0.2, nodSnap: 0.25, armWave: 0.3, hipSway: 0.4, stepTouch: 0.4, rickSway: 0.45, moonwalk: 0.45, sideClap: 0.5, bounce: 0.5, robot: 0.5,
     egyptian: 0.5, rattle: 0.5, zombie: 0.5, twist: 0.6, discoPoint: 0.6, shimmy: 0.6, kneeKnock: 0.6, sprinkler: 0.6, macarena: 0.6, bigFish: 0.65,
     charleston: 0.7, ymca: 0.7, dab: 0.7, airDrums: 0.75, floss: 0.8, runningMan: 0.8, shuffle: 0.8, windmill: 0.8, armsWave: 0.8, fistPump: 0.85,
-    gangnam: 0.85, headbang: 0.9, kicks: 0.9, headPop: 0.9, pogo: 1, bean: 0.55, hipThrust: 0.65, routine: 0.7, griddy: 0.75,
+    gangnam: 0.85, headbang: 0.9, kicks: 0.9, headPop: 0.9, pogo: 1, bean: 0.55, hipThrust: 0.65, routine: 0.7, griddy: 0.75, stayinAlive: 0.65,
   };
   // what kind of music it is decides which dances are on the table (beat.js guesses the kind from the title)
   const STYLES = {
     chill: ["sway", "nodSnap", "armWave", "hipSway", "stepTouch", "moonwalk", "rickSway"],
-    disco: ["discoPoint", "stepTouch", "twist", "shimmy", "sideClap", "sprinkler", "hipSway", "kneeKnock", "armsWave", "charleston", "armWave", "hipThrust", "routine", "bean"],
+    disco: ["stayinAlive", "discoPoint", "stepTouch", "twist", "shimmy", "sideClap", "sprinkler", "hipSway", "kneeKnock", "armsWave", "charleston", "armWave", "hipThrust", "routine", "bean"],
     pop: ["stepTouch", "sideClap", "floss", "rickSway", "twist", "shimmy", "runningMan", "robot", "egyptian", "bigFish", "sprinkler", "kneeKnock", "armsWave", "headPop", "dab", "moonwalk", "sway", "pogo", "griddy", "routine", "bean", "hipThrust"],
     rock: ["headbang", "airDrums", "windmill", "fistPump", "pogo", "kicks", "twist", "kneeKnock", "headPop", "nodSnap", "stepTouch", "hipThrust", "bean"],
     rave: ["fistPump", "shuffle", "runningMan", "bigFish", "pogo", "armsWave", "robot", "floss", "headPop", "bounce", "armWave", "griddy"],
@@ -324,7 +343,7 @@
     // The next dance: one that suits the kind of music, as lively as the music is right now, and not one
     // he's just done. A song with a dance of its own (Y.M.C.A., Thriller...) gets it every third phrase.
     function choose(c, n) {
-      if (c.signature && MOVES[c.signature] && n % 3 === 0 && cur !== c.signature) return c.signature;
+      if (c.signature && MOVES[c.signature] && n % 2 === 0 && cur !== c.signature) return c.signature;
       const pool = STYLES[c.style] || STYLES.pop;
       // phrases build like a song does: a bit more each time, biggest on the fourth
       const want = Math.min(1, c.energy * [0.85, 1, 0.92, 1.15][((n % 4) + 4) % 4]);
