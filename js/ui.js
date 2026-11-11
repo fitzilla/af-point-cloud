@@ -24,6 +24,8 @@
     { id: "sOnqjkJTMaA", name: "Thriller", style: "spooky", by: "Michael Jackson", bpm: 118, vibe: "groove", start: 252 },
     { id: "Gs069dndIYk", name: "September", style: "disco", by: "Earth, Wind & Fire", bpm: 126, vibe: "groove" },
     { id: "zWaymcVmJ-A", name: "Macarena", style: "latin", by: "Los Del Río", bpm: 103, vibe: "groove" },
+    { id: "CS9OO0S5w2k", name: "Y.M.C.A.", style: "disco", by: "Village People", bpm: 127, vibe: "hype" },
+    { id: "9bZkp7q19f0", name: "Gangnam Style", style: "pop", by: "PSY", bpm: 132, vibe: "hype" },
     { id: "dQw4w9WgXcQ", name: "Never Gonna Give You Up", style: "pop", by: "Rick Astley", bpm: 113, vibe: "groove" },
     { id: "OPf0YbXqDm0", name: "Uptown Funk", style: "disco", by: "Mark Ronson", bpm: 115, vibe: "groove" },
     { id: "v2AC41dglnM", name: "Thunderstruck", style: "rock", by: "AC/DC", bpm: 134, vibe: "hype" },

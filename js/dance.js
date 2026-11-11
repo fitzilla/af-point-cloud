@@ -188,10 +188,23 @@
 
     // ---- and a lot more, so he isn't doing the same eight things all night ----
     // Y, M, C, A: one letter a beat
+    // Y.M.C.A.: a letter on each beat, spelt for whoever's watching (the C opens to their right), then
+    // four beats of clapping overhead before the next go
     ymca(ph, p) {
-      const T = [[2.55, 0, 2.55, 0, 0], [2.0, -2.1, 2.0, -2.1, 0], [2.9, -0.9, -0.5, -0.6, 0.2], [2.75, -0.75, 2.75, -0.75, 0]][Math.floor(ph) % 4];
-      p.aLa = T[0]; p.aLz = T[1]; p.aRa = T[2]; p.aRz = T[3]; p.srz = T[4]; p.aLb = p.aRb = 0; p.snap = 1;
-      p.hy = -0.04 - 0.05 * hit(ph); p.hx = 0.06 * sn(ph, 4); p.jaw = 0.5 * hit(ph, 2);
+      //            out to side, forward, elbow bend, elbow sideways  (worked out from where the elbows and hands should be)
+      const Y = [2.5, 0, 0, 0], M = [2.4, 0, 0, 1.8], A = [3.1, 0, 0, 0.4];
+      const set = (L, v) => { p["a" + L + "a"] = v[0]; p["a" + L + "f"] = v[1]; p["a" + L + "b"] = v[2]; p["a" + L + "z"] = v[3]; };
+      const c = Math.floor(ph) % 8, h = hit(ph);
+      p.snap = 1; p.hy = -0.05 - 0.05 * h; p.jaw = 0.55 * hit(ph, 2); p.kL = p.kR = 0.35;
+      if (c === 0) { set("L", Y); set("R", Y); p.nrx = -0.2; }
+      else if (c === 1) { set("L", M); set("R", M); p.nrx = 0.15; }
+      else if (c === 2) { set("L", [3.1, 0, 0, 1.0]); set("R", [0.7, 0, 0.4, -2.2]); p.srz = 0.16; p.crz = 0.08; p.hx = 0.06; p.nrz = 0.15; }   // one arm over the top, one round the waist
+      else if (c === 3) { set("L", A); set("R", A); p.nrx = -0.25; p.air = 0.06 * Math.sin(Math.PI * fr(ph)); }
+      else {                                  // clap, clap, clap, clap, swaying
+        const open = 1 - hit(ph * 2, 4), sw = sn(ph, 2);
+        set("L", [2.5 + 0.6 * (1 - open), 0, 0, 0.4 * (1 - open)]); set("R", [2.5 + 0.6 * (1 - open), 0, 0, 0.4 * (1 - open)]);
+        p.hx = 0.08 * sw; p.hrz = -0.08 * sw; p.srz = 0.06 * sw; p.nrz = -0.08 * sw; p.snap = 0;
+      }
     },
     // both arms out to one side like claws, shuffling after them: the graveyard one
     zombie(ph, p) {
@@ -287,12 +300,20 @@
       }
     },
     // riding an invisible horse, then swinging an invisible lasso
+    // Gangnam Style: riding the invisible horse (wrists crossed on the reins, a double hop on each foot),
+    // then swinging the lasso round his head for four beats, the other hand still on the reins
     gangnam(ph, p) {
-      const s = sn(ph, 2);
-      p.fLx = 0.2; p.fRx = -0.2; p.fLy = 0.14 * Math.max(0, s); p.fRy = 0.14 * Math.max(0, -s); p.kL = p.kR = 0.7;
-      p.hy = -0.16 + 0.04 * Math.abs(sn(ph, 1)); p.nrx = 0.15 * hit(ph);
-      p.aLf = p.aRf = 0.75; p.aLa = p.aRa = -0.15; p.aLb = p.aRb = 0.6 + 0.3 * hit(ph * 2, 2);
-      if (ph % 8 >= 4) { p.aRa = 2.6; p.aRb = 0.1; p.aRz = 0.5 * sn(ph, 1); p.aRf = 0.4 * sn(ph, 1, 0.25); }
+      const c = ph % 8, b2 = hit(ph * 2, 2), foot = Math.floor(ph) % 2 ? "L" : "R";
+      p.fLx = 0.24; p.fRx = -0.24; p.kL = p.kR = 0.85; p.hy = -0.2 - 0.07 * b2; p.hry = 0.08 * sn(ph, 2);
+      p["f" + foot + "y"] = 0.17 * Math.sin(Math.PI * fr(ph));
+      p.nrx = 0.18 * b2 - 0.05; p.jaw = 0.35 * b2; p.crx = 0.08;
+      // the reins: both forearms across in front, the left wrist over the right, bouncing
+      p.aLa = p.aRa = -0.2; p.aLf = 1.0; p.aRf = 0.85; p.aLb = 1.05 + 0.25 * b2; p.aRb = 0.95 + 0.25 * b2;
+      if (c >= 4) {                           // the lasso
+        const a = TAU * ph;
+        p.aRa = 2.75; p.aRf = 0.45 * Math.sin(a); p.aRz = 0.55 * Math.cos(a); p.aRb = 0.15; p.aRh = 0.4;
+        p.nry = -0.15; p.cry = -0.1;
+      }
     },
     // side to side, elbows in, forearms swinging across: you know the one
     rickSway(ph, p) {
