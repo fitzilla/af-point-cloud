@@ -112,7 +112,8 @@ body {
 .tile .name { display: flex; align-items: center; gap: 8px; font-size: 10px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; }
 .knob { flex: none; width: 38px; height: 22px; padding: 2px; box-sizing: border-box; border-radius: 11px; background: rgba(255, 255, 255, 0.06); border: 1px solid color-mix(in srgb, var(--tint) 40%, #444); display: flex; transition: background 0.25s; }
 .knob i { width: 16px; height: 16px; border-radius: 8px; background: color-mix(in srgb, var(--tint) 45%, #999); transition: transform 0.25s ease, background 0.25s; }
-.tile .say { font-size: 9px; line-height: 1.5; letter-spacing: 0.02em; opacity: 0.8; min-height: 2.6em; }
+/* always exactly two lines, whatever it says, so the switches never change size */
+.tile .say { font-size: 9px; line-height: 1.5; letter-spacing: 0.02em; opacity: 0.8; height: 3em; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .tile[aria-checked="true"] { background: var(--tint); border: 1px solid var(--tint); color: #020604; }
 .tile[aria-checked="true"] .knob { background: #020604; border-color: #020604; }
 .tile[aria-checked="true"] .knob i { transform: translateX(16px); background: var(--tint); }
@@ -315,6 +316,6 @@ body {
 <script src="js/mirror.js?v=828cd473"></script>
 <script src="js/dance.js?v=e7773f58"></script>
 <script src="js/stage.js?v=a07aa71a"></script>
-<script src="js/ui.js?v=0239caef"></script>
+<script src="js/ui.js?v=10c1a640"></script>
 
 </html>

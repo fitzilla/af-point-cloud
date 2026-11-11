@@ -243,7 +243,7 @@
     listenBtn.setAttribute("aria-checked", String(on));
     listenBtn.setAttribute("aria-busy", String(asking || (on && !bs.locked)));
     const msg = performance.now() < listenUntil ? listenMsg : "";
-    put(listenSay, msg || (on ? (bs.locked ? "On · he’s on the real beat" : "On · listening for the beat…") : bs.playing ? "Off · he’s guessing the beat. Turn on so he hears it" : "Off · turn on so he hears the music"));
+    put(listenSay, msg || (on ? (bs.locked ? "On · he’s on the real beat" : "On · listening for the beat…") : bs.playing ? "Off · he’s guessing. Turn on so he hears it" : "Off · turn on so he hears the music"));
     listenBtn.classList.toggle("nudge", !on && !asking && bs.playing && !tube.hidden);
     // how tall the dock is (the cards and the player sit above it), and how much of the bottom of the
     // picture is covered in the middle, where he is: he moves up to dance in what's left
@@ -270,14 +270,14 @@
   async function listen(kind, via) {
     asking = true;
     show(null);
-    sayListen(kind === "tab" ? "Pick this tab and tick “also share tab audio”" : "Allow the microphone, and turn the music up", 60);
+    sayListen(kind === "tab" ? "Pick this tab, tick “share tab audio”" : "Allow the mic, turn the music up", 60);
     try {
       await beat.listen(kind);
       listenUntil = 0;
       SK.track("listen_started", { kind, via });
       listenNote.textContent = "";
     } catch (e) {
-      const why = e && e.name === "NotAllowedError" ? "No permission, so he’s still guessing" : (e && e.message) || "That didn’t work";
+      const why = e && e.name === "NotAllowedError" ? "No mic allowed, so he’s guessing" : (e && e.message) || "That didn’t work";
       sayListen(why, 6);
       listenNote.textContent = why;
     }
@@ -298,7 +298,7 @@
 
   // ---------- copy me: the webcam, and he does what you do ----------
   const mirror = SK.mirror, copyBtn = $("copy"), copySay = $("copy-say"), camEl = $("cam"), camNote = $("cam-note");
-  const COPY_SAYS = { asking: "Allow the camera…", loading: "On · loading his eyes…", looking: "On · step back so he can see you", copying: "On · camera live, he’s copying you" };
+  const COPY_SAYS = { asking: "Allow the camera…", loading: "On · loading his eyes…", looking: "On · step back so he can see you", copying: "On · he’s copying you" };
   const CAM_SAYS = { loading: "Loading his eyes", looking: "Step back", copying: "Copying you" };
   let copyMsg = "", copyUntil = 0, copied = false;
   if (!mirror || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) copyBtn.hidden = true;
@@ -308,7 +308,7 @@
     copyBtn.setAttribute("aria-busy", String(status === "asking" || status === "loading"));
     camEl.hidden = !on;
     const msg = performance.now() < copyUntil ? copyMsg : "";
-    put(copySay, msg || COPY_SAYS[status] || "Off · turn on so he copies you. Uses your camera");
+    put(copySay, msg || COPY_SAYS[status] || "Off · turn on so he copies your moves");
     put(camNote, CAM_SAYS[status] || "");
     // once per visit: it found someone, so it works for them
     if (on && status === "copying" && !copied) { copied = true; SK.track("copy_me_seen", {}); }
