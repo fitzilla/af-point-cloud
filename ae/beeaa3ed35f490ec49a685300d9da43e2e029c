@@ -1,0 +1,21 @@
+js/stage.js
+  s_2e47aa980f998f::t_062d725f3d0f2c 725-726,735-738,749,826-827
+index.html
+  s_2e47aa980f998f::t_062d725f3d0f2c 321
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "aebeeaa3ed35f490ec49a685300d9da43e2e029c",
+  "prompts": {},
+  "sessions": {
+    "s_2e47aa980f998f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b3c7448d-e150-4670-85f4-faba3ba61633",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Aaron Fitzsimmons <afitzsimmons@stora.co>"
+    }
+  }
+}
