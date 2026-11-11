@@ -52,6 +52,7 @@
   color-scheme: dark;
 }
 html, body { height: 100%; margin: 0; }
+[hidden] { display: none !important; }      /* hidden means hidden, whatever display a rule gives it */
 body {
   background: var(--void);
   color: var(--tint);
@@ -225,11 +226,17 @@ body:not(.ready) #title, body:not(.ready) .dock, body:not(.ready) #corner { opac
 #count span { opacity: 0.6; }
 #count-n { display: flex; gap: 2px; font-weight: 500; }
 #count-n i { width: 13px; height: 20px; display: grid; place-items: center; font: 500 11px/1 var(--mono); letter-spacing: 0; font-style: normal; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 3px; }
-#info { width: 36px; height: 36px; display: grid; place-items: center; padding: 0; background: rgba(4, 9, 8, 0.6); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 18px; color: inherit; cursor: pointer; transition: background 0.2s; }
-#info:hover, #info[aria-expanded="true"] { background: color-mix(in srgb, var(--tint) 16%, transparent); }
-#info:focus-visible { outline: 1px solid currentColor; outline-offset: 2px; }
+.nets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.nets a { min-height: 32px; display: inline-flex; align-items: center; padding: 0 10px; border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 16px; color: inherit; text-decoration: none; font-size: 9px; }
+.nets a:hover, .nets a:focus-visible { background: color-mix(in srgb, var(--tint) 16%, transparent); outline: none; }
+.round, #info { width: 36px; height: 36px; display: grid; place-items: center; padding: 0; background: rgba(4, 9, 8, 0.6); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 18px; color: inherit; cursor: pointer; transition: background 0.2s; }
+.round:hover, .round[aria-expanded="true"], #info:hover, #info[aria-expanded="true"] { background: color-mix(in srgb, var(--tint) 16%, transparent); }
+.round:focus-visible, #info:focus-visible { outline: 1px solid currentColor; outline-offset: 2px; }
 .card.top { top: calc(env(safe-area-inset-top, 0px) + 62px); bottom: auto; left: auto; right: calc(max(16px, env(safe-area-inset-right, 0px)) + 4px); width: min(260px, calc(100vw - 32px)); transform: translateY(-8px); }
 .card.top.open { transform: none; }
+.tips { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; text-transform: none; letter-spacing: 0.04em; }
+.tips li { opacity: 0.85; }
+.tips b { font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; }
 .card a.out { display: flex; align-items: center; justify-content: space-between; min-height: 40px; margin-top: 12px; padding: 0 12px; background: var(--tint); color: #020604; border-radius: 8px; font-weight: 500; text-decoration: none; }
 .card a.out:hover { filter: brightness(1.12); }
 .card a.out:focus-visible { outline: 1px solid var(--tint); outline-offset: 2px; }
@@ -311,13 +318,37 @@ body:not(.ready) #title, body:not(.ready) .dock, body:not(.ready) #corner { opac
 
 <div id="corner">
   <p id="count" hidden><span>Visitors</span><b id="count-n"></b></p>
-  <button id="info" type="button" data-card="card-info" aria-expanded="false" aria-label="About this">
+  <button id="share" class="round" type="button" data-card="card-share" aria-expanded="false" aria-label="Share">
+    <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 13v6h14v-6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square"/></svg>
+  </button>
+  <button id="info" class="round" type="button" data-card="card-info" aria-expanded="false" aria-label="About this">
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 11v6" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="11" y="6.6" width="2" height="2" fill="currentColor"/></svg>
   </button>
 </div>
 
+<div class="card top" id="card-share" tabindex="-1" role="dialog" aria-label="Share">
+  <h2>Share him</h2>
+  <div class="rows">
+    <button id="share-copy" type="button"><b>Copy link</b><span>with the song</span></button>
+    <button id="share-native" type="button"><b>Share&hellip;</b><span>your apps</span></button>
+  </div>
+  <div class="nets">
+    <a id="share-x" href="https://x.com" target="_blank" rel="noopener">X</a>
+    <a id="share-bsky" href="https://bsky.app" target="_blank" rel="noopener">Bluesky</a>
+    <a id="share-whatsapp" href="https://wa.me" target="_blank" rel="noopener">WhatsApp</a>
+    <a id="share-linkedin" href="https://www.linkedin.com" target="_blank" rel="noopener">LinkedIn</a>
+    <a id="share-facebook" href="https://www.facebook.com" target="_blank" rel="noopener">Facebook</a>
+  </div>
+  <p id="share-note" role="status"></p>
+</div>
+
 <div class="card top" id="card-info" tabindex="-1" role="dialog" aria-label="About this">
   <h2>Dance Dance Skeleton</h2>
+  <ul class="tips">
+    <li><b>Type anything</b> and he&rsquo;s made of your words</li>
+    <li><b>Pick a song</b> and he dances to it</li>
+    <li><b>Poke him</b> and see what happens</li>
+  </ul>
   <p>Made by Aaron and Claude.</p>
   <a class="out" href="https://www.linkedin.com/in/aaron-fitzsimmons-533a1312/" target="_blank" rel="noopener">Aaron on LinkedIn<span aria-hidden="true">&#8599;</span></a>
 </div>
@@ -360,6 +391,6 @@ body:not(.ready) #title, body:not(.ready) .dock, body:not(.ready) #corner { opac
 <script src="js/mirror.js?v=164ca248"></script>
 <script src="js/dance.js?v=d9a47829"></script>
 <script src="js/stage.js?v=b64587df"></script>
-<script src="js/ui.js?v=ab9ec94c"></script>
+<script src="js/ui.js?v=fa74b73d"></script>
 
 </html>

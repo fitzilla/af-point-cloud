@@ -20,7 +20,8 @@
   const SONGS = [
     { id: "q6-ZGAGcJrk", name: "Spooky Scary Skeletons", style: "spooky", by: "The Living Tombstone", bpm: 128, vibe: "hype" },
     { id: "fNFzfwLM72c", name: "Stayin’ Alive", style: "disco", by: "Bee Gees", bpm: 104, vibe: "groove" },
-    { id: "sOnqjkJTMaA", name: "Thriller", style: "spooky", by: "Michael Jackson", bpm: 118, vibe: "groove" },
+    // (the short film talks for four minutes first: the song starts at 4:13, on the cinema marquee)
+    { id: "sOnqjkJTMaA", name: "Thriller", style: "spooky", by: "Michael Jackson", bpm: 118, vibe: "groove", start: 252 },
     { id: "Gs069dndIYk", name: "September", style: "disco", by: "Earth, Wind & Fire", bpm: 126, vibe: "groove" },
     { id: "zWaymcVmJ-A", name: "Macarena", style: "latin", by: "Los Del Río", bpm: 103, vibe: "groove" },
     { id: "dQw4w9WgXcQ", name: "Never Gonna Give You Up", style: "pop", by: "Rick Astley", bpm: 113, vibe: "groove" },
@@ -188,13 +189,13 @@
         player = await new Promise((resolve) => {
           const p = new YT.Player("player", {
             width: "100%", height: "100%", videoId: current.id, host: "https://www.youtube-nocookie.com",
-            playerVars: { playsinline: 1, rel: 0, autoplay: autoplay ? 1 : 0, origin: location.origin },
+            playerVars: { playsinline: 1, rel: 0, autoplay: autoplay ? 1 : 0, origin: location.origin, start: current.start || 0 },
             events: { onReady: () => resolve(p), onStateChange: onState, onError },
           });
         });
         player.getIframe().title = "YouTube player";
-      } else if (autoplay) player.loadVideoById(current.id);
-      else player.cueVideoById(current.id);
+      } else if (autoplay) player.loadVideoById({ videoId: current.id, startSeconds: current.start || 0 });
+      else player.cueVideoById({ videoId: current.id, startSeconds: current.start || 0 });
     } catch (e) {
       nowEl.textContent = e.message + ". Check your connection and try again.";
     }
@@ -377,6 +378,40 @@
     countEl.hidden = false;
   }
   if (params.has("count")) visitors(+params.get("count") || 0);      // for looking at it without the relay
+
+  // ---------- share: the link to him (dancing to this song, if one's on), copied or sent ----------
+  const shareNote = $("share-note");
+  const shareUrl = () => {
+    const url = new URL(location.origin + location.pathname);
+    if (current && !tube.hidden) url.searchParams.set("v", current.id);
+    return url.toString();
+  };
+  const shareText = () => (current && !tube.hidden && current.name ? `A skeleton made of symbols, dancing to ${current.name}` : "A skeleton made of symbols that dances to any song you pick");
+  function shared(via) { SK.track("shared", { via, video_id: current && !tube.hidden ? current.id : "" }); }
+  $("share-copy").addEventListener("click", async () => {
+    const url = shareUrl();
+    try { await navigator.clipboard.writeText(url); shareNote.textContent = "Copied. Paste it anywhere."; }
+    catch (e) { shareNote.textContent = url; }
+    shared("copy");
+  });
+  const native = $("share-native");
+  if (!navigator.share) native.hidden = true;
+  native.addEventListener("click", async () => {
+    try { await navigator.share({ title: "Dance Dance Skeleton", text: shareText(), url: shareUrl() }); shared("native"); } catch (e) { /* they changed their mind */ }
+  });
+  // the social links are built when the card opens, so they carry the song that's on
+  const NETWORKS = {
+    "share-x": (u, t) => `https://x.com/intent/post?text=${encodeURIComponent(t)}&url=${encodeURIComponent(u)}`,
+    "share-bsky": (u, t) => `https://bsky.app/intent/compose?text=${encodeURIComponent(t + " " + u)}`,
+    "share-whatsapp": (u, t) => `https://wa.me/?text=${encodeURIComponent(t + " " + u)}`,
+    "share-linkedin": (u) => `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(u)}`,
+    "share-facebook": (u) => `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(u)}`,
+  };
+  $("share").addEventListener("click", () => {
+    shareNote.textContent = "";
+    for (const id in NETWORKS) $(id).href = NETWORKS[id](shareUrl(), shareText());
+  });
+  for (const id in NETWORKS) $(id).addEventListener("click", () => shared(id.slice(6)));
 
   SK.ui = { tap, acted, play, videoId, visitors, songs: SONGS };
 })();
