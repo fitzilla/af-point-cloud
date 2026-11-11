@@ -56,10 +56,12 @@
   const params = new URLSearchParams(location.search);
   // What people do with him, sent to PostHog (cookieless, no profiles; see site-head.html). Only from the
   // real site, so previews and tests don't count; ?debug keeps a list in SK.tracked to check against.
+  // the real sites: only here does he count things in PostHog and join everyone else's room
+  const LIVE = /^(www\.)?(aaronfitzsimmons|dancedanceskeleton)\.com$/.test(location.hostname);
   SK.tracked = [];
   const track = (SK.track = (name, props) => {
     if (params.has("debug")) SK.tracked.push([name, props]);
-    try { if (location.hostname === "aaronfitzsimmons.com" && window.posthog && window.posthog.capture) window.posthog.capture(name, props); } catch (e) { /* analytics never gets in his way */ }
+    try { if (LIVE && window.posthog && window.posthog.capture) window.posthog.capture(name, props); } catch (e) { /* analytics never gets in his way */ }
   });
   const coarse = matchMedia("(pointer: coarse)").matches || Math.min(innerWidth, innerHeight) < 560;
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -750,7 +752,7 @@
   // ---------- together: everyone on the page sees each other's cursors (which stir him) and anyone can type ----------
   // The relay is a small Cloudflare worker (see relay/); ?mp=ws://... points at another one for testing.
   const RELAY = "wss://aaron-cursors.aaron-cursors.workers.dev/ws";
-  const MP_URL = params.get("mp") || (RELAY && location.hostname === "aaronfitzsimmons.com" ? RELAY : "");
+  const MP_URL = params.get("mp") || (RELAY && LIVE ? RELAY : "");
   const peerBox = $("peers"), peers = new Map();
   const peerU = velMat.uniforms.uPeer.value, peerV = velMat.uniforms.uPeerVel.value, peerP = new THREE.Vector3();
   const mp = { ws: null, tries: 0, sentAt: 0, sx: 9, sy: 9, left: true };
