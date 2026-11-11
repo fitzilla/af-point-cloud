@@ -29,14 +29,14 @@
 <meta property="og:site_name" content="Aaron Fitzsimmons">
 <meta property="og:title" content="AARON">
 <meta property="og:description" content="aaronfitzsimmons.com">
-<meta property="og:image" content="https://aaronfitzsimmons.com/og.jpg">
+<meta property="og:image" content="https://aaronfitzsimmons.com/og.jpg?v=2">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="The word AARON built from glowing green particles on a dark background.">
+<meta property="og:image:alt" content="A skull built from glowing green symbols and particles on a dark background.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="AARON">
 <meta name="twitter:description" content="aaronfitzsimmons.com">
-<meta name="twitter:image" content="https://aaronfitzsimmons.com/og.jpg">
+<meta name="twitter:image" content="https://aaronfitzsimmons.com/og.jpg?v=2">
 <meta name="theme-color" content="#020604">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -173,6 +173,9 @@ body {
 #now { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.75; }
 #tube-close { padding: 6px 8px; background: transparent; border: 0; color: inherit; font: inherit; letter-spacing: inherit; text-transform: uppercase; cursor: pointer; opacity: 0.6; }
 #tube-close:hover { opacity: 1; }
+#tube-listen { display: block; width: 100%; padding: 8px 10px; background: color-mix(in srgb, var(--tint) 14%, transparent); border: 0; color: inherit; font: 400 9px/1.4 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; text-align: left; cursor: pointer; }
+#tube-listen:hover { background: color-mix(in srgb, var(--tint) 26%, transparent); }
+#tube-listen[hidden] { display: none; }
 /* other visitors' cursors */
 #peers { position: fixed; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; }
 #peers i { position: absolute; left: 0; top: 0; width: 6px; height: 6px; margin: -3px 0 0 -3px; background: currentColor; box-shadow: 0 0 8px 2px currentColor, 0 0 22px 6px color-mix(in srgb, currentColor 35%, transparent); opacity: 0; will-change: transform, opacity; }
@@ -193,7 +196,7 @@ body {
 }
 </style>
 
-<canvas id="stage" role="img" aria-label="A skeleton built from a glitching cloud of symbols. Pick a song and he dances to it. Move the pointer through him to disturb him, or type to change what he is made of."></canvas>
+<canvas id="stage" role="img" aria-label="A skeleton built from a cloud of symbols. Pick a song and he dances to it. Move the pointer through him to disturb him, or type to change what he is made of."></canvas>
 
 <div id="peers"></div>
 
@@ -202,6 +205,7 @@ body {
 <div id="tube" hidden>
   <div class="screen"><div id="player"></div></div>
   <div class="bar"><span id="now"></span><button id="tube-close" type="button" aria-label="Stop the music and close the player">Stop</button></div>
+  <button id="tube-listen" type="button">Let him hear it, and he follows the real beat</button>
 </div>
 
 <div class="card left" id="card-song" hidden>
@@ -239,10 +243,6 @@ body {
 </div>
 
 <div class="controls">
-  <button id="vibe" class="ctl" type="button" aria-label="Vibe">
-    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3 12h3l2-6 4 12 3-9 2 3h4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square"/></svg>
-    <span>Auto</span>
-  </button>
   <button id="tap" class="ctl" type="button" aria-label="Tap the beat">
     <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="9" y="9" width="6" height="6" fill="currentColor"/><path d="M4 4h4M16 4h4M4 20h4M16 20h4M4 4v4M20 4v4M4 16v4M20 16v4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square"/></svg>
     <span>Tap</span>
@@ -260,10 +260,10 @@ body {
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="js/beat.js?v=a784716a"></script>
+<script src="js/beat.js?v=3979eb70"></script>
 <script src="js/rig.js?v=8191f6bd"></script>
-<script src="js/dance.js?v=d0e6b7f5"></script>
-<script src="js/stage.js?v=88e8d45f"></script>
-<script src="js/ui.js?v=a5b60e09"></script>
+<script src="js/dance.js?v=c9a11d05"></script>
+<script src="js/stage.js?v=e42442e5"></script>
+<script src="js/ui.js?v=3b10dfe9"></script>
 
 </html>

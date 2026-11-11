@@ -236,7 +236,7 @@
   // ---------- GPU simulation: velocity pass (w = accumulated damage) ----------
   const VEL_FRAG = `
     uniform sampler2D tPos; uniform sampler2D tVel; uniform sampler2D tHome;
-    uniform float uTime, uDt, uEnergy, uGlitch, uInit, uHover, uSpeed, uRadius, uMotion, uKick, uLoose;
+    uniform float uTime, uDt, uEnergy, uInit, uHover, uSpeed, uRadius, uMotion, uKick, uBass, uLoose;
     uniform vec3 uRayO, uRayD, uMouseVel;
     uniform vec4 uPeer[${MAXP}]; uniform vec3 uPeerVel[${MAXP}];   // other visitors: xy, presence, speed
     varying vec2 vUv;
@@ -278,7 +278,7 @@
       vec3 acc = (h - p) * k;
 
       // turbulence: idle shimmer up to full abstraction
-      acc += n * (0.22 + inst * 2.4 + dmg * 1.4 + uGlitch * 1.5 + air * 0.25) * uMotion * mix(1.0, 0.35, glyph);
+      acc += n * (0.22 + inst * 2.4 + dmg * 1.4 + air * 0.25) * uMotion * mix(1.0, 0.35, glyph);
 
       // local field near the pointer: a noise partition decides repel, attract or swirl
       float mode = f > 0.0 ? snoise(h * 2.2 + vec3(uTime * 0.2)) : 0.0;
@@ -313,8 +313,10 @@
       // the beat: every bone puffs a little dust out sideways; the floor's rings jump
       vec3 core = boneAt(bone, vec4(0.0, H.y, 0.0, 1.0), 0.0);
       vec3 puff = normalize(h - core + rnd * 0.35 + vec3(1e-4));
-      v += puff * uKick * uKick * (0.25 + r * 1.1) * mix(1.0, 0.2, glyph) * (1.0 - air) * uDt * 26.0;
+      v += puff * uKick * uKick * (0.25 + r * 1.1) * mix(1.0, 0.35, glyph) * (1.0 - air) * uDt * 46.0;
       v.y += air * uKick * uKick * r * uDt * 9.0;
+      // and while he can hear, the bass keeps the dust breathing between the beats
+      v += puff * uBass * (0.2 + r) * (1.0 - glyph) * (1.0 - air) * uDt * 6.0;
 
       v += acc * uDt;
       v += (ride * (1.0 - air) - v) * (1.0 - exp(-mix(mix(13.0, 30.0, r), 44.0, glyph) * mix(1.0, 0.08, clamp(inst * 0.45 + loosen * 0.6, 0.0, 1.0)) * uDt));
@@ -332,14 +334,14 @@
   // ---------- GPU simulation: position pass ----------
   const POS_FRAG = `
     uniform sampler2D tPos; uniform sampler2D tVel; uniform sampler2D tHome;
-    uniform float uDt, uInit, uTime, uGlitch, uEnergy;
+    uniform float uDt, uInit;
     varying vec2 vUv;
     ${HASH}
     ${BONES}
     void main(){
       vec4 H = texture2D(tHome, vUv);
-      vec3 h = boneAt(homeBone(H), vec4(H.xyz, 1.0), 0.0);
       if (uInit > 0.5) {
+        vec3 h = boneAt(homeBone(H), vec4(H.xyz, 1.0), 0.0);
         float r = homeSeed(H);
         vec3 rnd = vec3(hash11(r * 917.3), hash11(r * 331.7 + 1.3), hash11(r * 613.1 + 7.1)) - 0.5;
         gl_FragColor = vec4(h + normalize(rnd + vec3(1e-4)) * (1.2 + 3.0 * hash11(r * 71.9)), 0.9);
@@ -348,11 +350,6 @@
       vec4 P = texture2D(tPos, vUv);
       vec4 V = texture2D(tVel, vUv);
       vec3 p = P.xyz + V.xyz * uDt;
-      // voxel corruption: during glitches whole slices snap toward a coarse grid
-      float slice = floor(h.y * 22.0);
-      float on = step(1.0 - (uGlitch * 0.5 + uEnergy * 0.04), hash21(vec2(slice, floor(uTime * 9.0))));
-      float q = 0.05 + 0.1 * hash11(slice + 0.5);
-      p = mix(p, floor(p / q + 0.5) * q, on * 0.5);
       float l = length(p);
       if (l > 10.0) p *= 10.0 / l;
       gl_FragColor = vec4(p, V.w);
@@ -363,7 +360,7 @@
   const PT_VERT = `
     attribute vec2 aRef; attribute vec4 aRand; attribute float aGlyph, aAng, aSize;
     uniform sampler2D tPos; uniform sampler2D tHome;
-    uniform float uTime, uEnergy, uGlitch, uPR, uSize, uCamDist, uMotion, uPxScale, uKick, uBar;
+    uniform float uTime, uEnergy, uPR, uSize, uCamDist, uMotion, uPxScale, uKick, uBar, uBeat, uDrive, uTreble;
     uniform vec3 uPrimary, uHighlight, uSoft, uDeep;
     varying vec3 vColor; varying float vAlpha; varying float vShape; varying float vSeed; varying float vGlyph; varying vec2 vRot;
     ${HASH}
@@ -376,22 +373,11 @@
       vec3 p = P.xyz; float dmg = P.w;
       float tq = floor(uTime * 24.0);
 
-      // unstable returns: a few points jump every frame
-      float fl = step(0.992 - uEnergy * 0.03 - uGlitch * 0.05, hash21(vec2(aRand.x * 311.0, tq)));
-      p += (vec3(hash21(vec2(aRand.x, tq)), hash21(vec2(aRand.y, tq)), hash21(vec2(aRand.z, tq))) - 0.5)
-           * fl * (0.04 + uEnergy * 0.25) * uMotion;
+      // a faint shimmer in the dust
       p.xy += (vec2(hash21(vec2(aRand.w, tq + 1.0)), hash21(vec2(aRand.x, tq + 2.0))) - 0.5) * 0.004 * uMotion * (1.0 - glyph);
 
       vec4 mv = modelViewMatrix * vec4(p, 1.0);
-      vec4 clip = projectionMatrix * mv;
-
-      // screen-space tearing bands
-      float row = floor((clip.y / clip.w * 0.5 + 0.5) * 64.0);
-      float tq2 = floor(uTime * 16.0);
-      float tearAmt = (uGlitch * 0.7 + uEnergy * 0.15) * uMotion;
-      float tear = step(1.0 - tearAmt * 0.3, hash21(vec2(row, tq2)));
-      clip.x += tear * (hash21(vec2(row * 1.7, tq2 + 3.0)) - 0.5) * 0.35 * tearAmt * clip.w;
-      gl_Position = clip;
+      gl_Position = projectionMatrix * mv;
 
       float big = step(0.988, aRand.w);
       float sz = uSize * (0.55 + aRand.z * 1.1) * (1.0 + dmg * 0.7) * (1.0 + big * 2.2);
@@ -402,7 +388,7 @@
         vec3 along = (modelViewMatrix * vec4(boneAt(bone, vec4(cos(aAng), sin(aAng), 0.0, 0.0), 0.0), 0.0)).xyz;
         float al = length(along.xy);
         if (al > 1e-4) vRot = along.xy / al;
-        gl_PointSize = clamp(aSize * 1.42 * uPxScale / -mv.z * (1.0 + dmg * 0.3 + uKick * 0.14 * aRand.z), 3.0, 72.0 * uPR);
+        gl_PointSize = clamp(aSize * 1.42 * uPxScale / -mv.z * (1.0 + dmg * 0.3 + uKick * 0.26 * aRand.z), 3.0, 72.0 * uPR);
       }
 
       vec3 acid = uPrimary;
@@ -434,8 +420,14 @@
       float depth = clamp(1.0 - (-mv.z - uCamDist) * 0.45, 0.2, 1.35);
       vColor = c * depth;
       vAlpha = mix(0.34, 0.95, glyph) * (0.6 + 0.4 * aRand.z) * (1.0 + sw * 0.8);
-      // the floor glows on the first beat of the bar and sits quiet otherwise; the far dust is faint
-      vAlpha *= mix(1.0, 0.3 + 0.9 * uBar + 0.4 * uKick, air);
+      // he brightens on every beat, and the high end of the music sets his dust glinting
+      vAlpha *= 1.0 + uKick * 0.45 * (1.0 - air);
+      vAlpha *= 1.0 + uTreble * 0.9 * step(0.72, hash21(vec2(aRand.x * 91.0, tq)));
+      // each beat sends a ring of light out across the floor from under his feet; the far dust is faint
+      float onFloor = air * step(H.y, -1.7);
+      float ring = length(H.xz) - uBeat * 2.0;
+      float ripple = exp(-ring * ring * 14.0) * (1.0 - uBeat) * uDrive;
+      vAlpha *= mix(1.0, mix(0.3 + 0.5 * uKick, 0.2 + 2.6 * ripple + 0.8 * uBar, onFloor), air);
       if (aGlyph < -1.5) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);   // a space between words: not drawn
       vShape = aRand.w;
       vSeed = aRand.x;
@@ -466,14 +458,11 @@
   // ---------- post: ghost trail ----------
   const TRAIL_FRAG = `
     uniform sampler2D tScene; uniform sampler2D tPrev;
-    uniform float uDecay, uTime, uEnergy; uniform vec2 uDrift;
+    uniform float uDecay; uniform vec2 uDrift;
     varying vec2 vUv;
-    ${HASH}
     void main(){
       vec3 cur = texture2D(tScene, vUv).rgb;
-      float n = hash21(vec2(floor(vUv.y * 90.0), floor(uTime * 20.0)));
-      vec2 off = uDrift + vec2((n - 0.5) * 0.004 * uEnergy, 0.0);
-      vec3 prev = texture2D(tPrev, vUv - off).rgb * uDecay;
+      vec3 prev = texture2D(tPrev, vUv - uDrift).rgb * uDecay;
       gl_FragColor = vec4(max(cur, prev), 1.0);
     }
   `;
@@ -481,60 +470,20 @@
   // ---------- post: composite ----------
   const FINAL_FRAG = `
     uniform sampler2D tTrail;
-    uniform float uTime, uEnergy, uGlitch, uSpeed, uCollapse, uHover, uAspect, uMotion;
-    uniform vec2 uMouse, uSplitDir, uRes;
+    uniform float uTime, uEnergy, uAspect, uPulse;
     uniform vec3 uBgNear, uBgFar, uBloom, uPulseCol;
-    uniform float uPulse;
     varying vec2 vUv;
     ${HASH}
     void main(){
-      vec2 uv = vUv;
-      float prox = smoothstep(0.3, 0.0, length((uv - uMouse) * vec2(uAspect, 1.0))) * uHover;
-      float sp = clamp(uSpeed / 3.0, 0.0, 1.5);
-      float chaos = (uGlitch * 0.8 + uEnergy * 0.22 + uCollapse * 0.6) * uMotion;
-      float local = prox * (0.2 + sp) * uMotion;
-
-      // block displacement
-      float bt = floor(uTime * (8.0 + 24.0 * chaos));
-      vec2 grid = vec2(18.0, 32.0) * (0.6 + hash21(vec2(bt, 3.0)));
-      vec2 blk = floor(uv * grid);
-      float bh = hash21(blk + bt * 0.37);
-      float amt = chaos * 0.2 + local * 0.55;
-      vec2 duv = uv;
-      if (bh < amt) duv += (vec2(hash21(blk + bt + 1.7), hash21(blk - bt + 9.1)) - 0.5) * vec2(0.18, 0.04) * (0.4 + chaos + local);
-
-      // hairline tears
-      float line = floor(uv.y * uRes.y / 3.0);
-      float lt = step(1.0 - (chaos * 0.06 + local * 0.12), hash21(vec2(line, bt)));
-      duv.x += lt * (hash21(vec2(line * 3.1, bt)) - 0.5) * 0.12;
-
-      // chromatic separation along the direction of motion
-      vec2 sd = uSplitDir * (0.0012 + uEnergy * 0.0035 + uGlitch * 0.012 + local * 0.02 + uCollapse * 0.01) * uMotion;
-      vec3 col = vec3(texture2D(tTrail, duv + sd).r, texture2D(tTrail, duv).g, texture2D(tTrail, duv - sd).b);
-
-      // fragmented duplicates
-      if (bh > 1.0 - amt * 0.5) col += texture2D(tTrail, duv + uSplitDir * 0.05 * (0.5 + bh)).rgb * vec3(0.6, 0.35, 0.9);
-
-      col = 1.0 - exp(-col * 1.4);
+      vec3 col = 1.0 - exp(-texture2D(tTrail, vUv).rgb * 1.4);
 
       vec2 cuv = (vUv - 0.5) * vec2(uAspect, 1.0);
       float vg = length(cuv);
       vec3 bg = mix(uBgNear, uBgFar, smoothstep(0.05, 0.9, vg));
       bg += uBloom * smoothstep(0.7, 0.0, vg) * (0.4 + 0.6 * clamp(uEnergy, 0.0, 1.0));
-      // the first beat of the bar: a blocky burst of pixels from behind him and a broken ring that widens as it fades
-      float pb = floor(uTime * 12.0);
-      float px = 0.012 + 0.03 * hash21(vec2(pb, 5.0));
-      vec2 pcell = floor(cuv / px);
-      float qd = length(pcell * px);
-      float bn = hash21(pcell + pb * 1.37);
-      float big = smoothstep(0.6, 1.0, uPulse);
-      float ringR = 0.1 + (1.0 - uPulse) * 0.9;
-      float rd = (qd - ringR) * 9.0;
-      float ring = exp(-rd * rd);
-      float core = smoothstep(0.9, 0.0, qd);
-      float pix = step(1.0 - (0.35 + 0.4 * big) * uPulse, bn);
-      bg += uPulseCol * uPulse * (core * 0.12 + ring * 0.13) * (0.35 + 1.3 * pix);
-      bg += mix(uPulseCol, vec3(1.0), 0.5) * step(0.985 - big * uPulse * 0.05, bn) * big * uPulse * 0.55 * smoothstep(1.4, 0.2, qd);
+      // the first beat of the bar: a glow from behind him and a soft ring that widens as it fades
+      float rd = (vg - (0.1 + (1.0 - uPulse) * 0.9)) * 7.0;
+      bg += uPulseCol * uPulse * (smoothstep(0.9, 0.0, vg) * 0.12 + exp(-rd * rd) * 0.1);
       vec3 o = bg + col;
       o *= 0.94 + 0.06 * sin(gl_FragCoord.y * 1.5708 + uTime * 6.0);
       o += (hash21(gl_FragCoord.xy + fract(uTime) * 517.0) - 0.5) * 0.045;
@@ -567,26 +516,23 @@
   const V3 = () => new THREE.Vector3();
   const velMat = fsMat(VEL_FRAG, {
     tPos: { value: null }, tVel: { value: null }, tHome: { value: homeTex }, tBones: { value: boneTex },
-    uTime: { value: 0 }, uDt: { value: 0.016 }, uEnergy: { value: 0 }, uGlitch: { value: 0 },
+    uTime: { value: 0 }, uDt: { value: 0.016 }, uEnergy: { value: 0 },
     uInit: { value: 1 }, uHover: { value: 0 }, uSpeed: { value: 0 }, uRadius: { value: 0.3 }, uMotion: { value: MOTION },
-    uKick: { value: 0 }, uLoose: { value: 0 },
+    uKick: { value: 0 }, uBass: { value: 0 }, uLoose: { value: 0 },
     uRayO: { value: V3() }, uRayD: { value: new THREE.Vector3(0, 0, -1) }, uMouseVel: { value: V3() },
     uPeer: { value: Array.from({ length: MAXP }, () => new THREE.Vector4()) }, uPeerVel: { value: Array.from({ length: MAXP }, V3) },
   });
   const posMat = fsMat(POS_FRAG, {
     tPos: { value: null }, tVel: { value: null }, tHome: { value: homeTex }, tBones: { value: boneTex },
-    uDt: { value: 0.016 }, uInit: { value: 1 }, uTime: { value: 0 }, uGlitch: { value: 0 }, uEnergy: { value: 0 },
+    uDt: { value: 0.016 }, uInit: { value: 1 },
   });
   const trailMat = fsMat(TRAIL_FRAG, {
-    tScene: { value: null }, tPrev: { value: null }, uDecay: { value: 0.4 }, uTime: { value: 0 }, uEnergy: { value: 0 },
-    uDrift: { value: new THREE.Vector2() },
+    tScene: { value: null }, tPrev: { value: null }, uDecay: { value: 0.4 }, uDrift: { value: new THREE.Vector2() },
   });
   const finalMat = fsMat(FINAL_FRAG, {
-    tTrail: { value: null }, uTime: { value: 0 }, uEnergy: { value: 0 }, uGlitch: { value: 0 }, uSpeed: { value: 0 },
-    uCollapse: { value: 0 }, uHover: { value: 0 }, uAspect: { value: 1 }, uMotion: { value: MOTION },
+    tTrail: { value: null }, uTime: { value: 0 }, uEnergy: { value: 0 }, uAspect: { value: 1 },
     uBgNear: { value: PAL.bgNear }, uBgFar: { value: PAL.bgFar }, uBloom: { value: PAL.bloom },
     uPulse: { value: 0 }, uPulseCol: { value: PAL.primary.clone() },
-    uMouse: { value: new THREE.Vector2(-9, -9) }, uSplitDir: { value: new THREE.Vector2(1, 0) }, uRes: { value: new THREE.Vector2(1, 1) },
   });
 
   const geo = new THREE.BufferGeometry();
@@ -602,7 +548,7 @@
     vertexShader: PT_VERT, fragmentShader: PT_FRAG,
     uniforms: {
       tPos: { value: null }, tHome: { value: homeTex }, tBones: { value: boneTex }, tAtlas: { value: atlasTex },
-      uTime: { value: 0 }, uEnergy: { value: 0 }, uGlitch: { value: 0 }, uKick: { value: 0 }, uBar: { value: 0 },
+      uTime: { value: 0 }, uEnergy: { value: 0 }, uKick: { value: 0 }, uBar: { value: 0 }, uBeat: { value: 1 }, uDrive: { value: 0 }, uTreble: { value: 0 },
       uPrimary: { value: PAL.primary }, uHighlight: { value: PAL.highlight }, uSoft: { value: PAL.soft }, uDeep: { value: PAL.deep },
       uPR: { value: PR }, uSize: { value: coarse ? 0.95 : 1.15 }, uCamDist: { value: 6 }, uMotion: { value: MOTION }, uPxScale: { value: 1 },
     },
@@ -659,7 +605,6 @@
     ptMat.uniforms.uPR.value = pointPR;
     ptMat.uniforms.uPxScale.value = sh / (2 * TF);
     finalMat.uniforms.uAspect.value = w / h;
-    finalMat.uniforms.uRes.value.set(bw, bh);
   }
   let resizeQueued = false;
   addEventListener("resize", () => {
@@ -676,8 +621,8 @@
   // ---------- interaction state ----------
   const pointer = { ndc: new THREE.Vector2(9, 9), inside: false, lx: 0, ly: 0, lt: 0 };
   const st = {
-    hover: 0, speed: 0, speedTarget: 0, energy: 0, glitch: 0, lastMove: -10, clickBoom: 0, pulse: 0, peak: 0, loose: 0,
-    velScreen: new THREE.Vector2(), velScreenTarget: new THREE.Vector2(), splitDir: new THREE.Vector2(1, 0),
+    hover: 0, speed: 0, speedTarget: 0, energy: 0, lastMove: -10, clickBoom: 0, pulse: 0, peak: 0, loose: 0,
+    velScreen: new THREE.Vector2(), velScreenTarget: new THREE.Vector2(),
     velWorld: new THREE.Vector3(), lastHit: null, parX: 0, parY: 0,
   };
   const overUI = (e) => e.target instanceof Element && !!e.target.closest(".controls, .card, #tube");
@@ -703,7 +648,8 @@
     if (overUI(e)) return;
     pointer.lt = 0;
     st.clickBoom = 1;      // a click blows the particles apart under the cursor,
-    dance.startle();       // and makes him jump
+    const bone = boneUnder(e);
+    if (bone < 0 || !dance.poke(rig.bones[bone].name)) dance.startle();     // and he takes it differently depending on where it lands
     onMove(e);
   }, { passive: true });
   addEventListener("pointerup", (e) => { if (e.pointerType !== "mouse") onLeave(); });
@@ -713,6 +659,25 @@
 
   const raycaster = new THREE.Raycaster();
   const inv = new THREE.Matrix4();
+  // Which bone a click landed on (-1: none). Some are fatter targets than their centre line.
+  const pickO = new THREE.Vector3(), pickD = new THREE.Vector3(), pickP = new THREE.Vector3(), pickN = new THREE.Vector2();
+  const GIRTH = { head: 0.17, chest: 0.24, pelvis: 0.17, jaw: 0.02 };
+  function boneUnder(e) {
+    raycaster.setFromCamera(pickN.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1), camera);
+    inv.copy(sculpture.matrixWorld).invert();
+    pickO.copy(raycaster.ray.origin).applyMatrix4(inv);
+    pickD.copy(raycaster.ray.direction).transformDirection(inv);
+    let best = -1, nearest = 0.13;
+    for (let b = 0; b < rig.NB - 1; b++) {
+      const bone = rig.bones[b], from = b === rig.B.jaw ? -1 : 0;
+      for (let k = from; k <= 5; k++) {
+        pickP.set(0, (bone.len * k) / 5, 0).applyMatrix4(bone.world).sub(pickO);
+        const d = pickP.addScaledVector(pickD, -pickP.dot(pickD)).length() - (GIRTH[bone.name] || 0);
+        if (d < nearest) { nearest = d; best = b; }
+      }
+    }
+    return best;
+  }
   const rayO = velMat.uniforms.uRayO.value, rayD = velMat.uniforms.uRayD.value;
   const hit = new THREE.Vector3(), tmpV = new THREE.Vector3();
 
@@ -740,7 +705,6 @@
     typed = next;
     lastKey = performance.now() / 1000;
     // every key rattles him a little, and his jaw goes as if he's saying it
-    st.glitch = Math.max(st.glitch, 0.45);
     st.energy = Math.min(1.4, st.energy + 0.06);
     dance.talk();
     clearTimeout(wordTimer);
@@ -751,7 +715,7 @@
   // reset: symbols again, a fresh palette, and he falls in a heap and puts himself back together
   function resetAll() {
     typeText("");
-    st.energy = 0; st.glitch = 1;
+    st.energy = 0;
     dance.collapse();
     newPalette();
   }
@@ -829,8 +793,8 @@
   }
   connect();
 
-  const danceCtx = { beat: 0, bpm: 118, vibe: "groove", energy: 0, going: false, lookX: 0, lookY: 0, t: 0 };
-  let heapMax = 0;
+  const danceCtx = { beat: 0, bpm: 118, vibe: "groove", style: "pop", signature: "", energy: 0, going: false, hit: 0, lookX: 0, lookY: 0, t: 0 };
+  let heapMax = 0, verse = 0;
   function update(dt, t) {
     const now = performance.now() / 1000;
     const idleFor = now - st.lastMove;
@@ -843,7 +807,6 @@
     st.speedTarget *= Math.exp(-dt * 7);
     st.velScreen.lerp(st.velScreenTarget, Math.min(1, dt * 10));
     st.velScreenTarget.multiplyScalar(Math.exp(-dt * 7));
-    if (st.velScreen.length() > 0.08) st.splitDir.lerp(tmpV.set(st.velScreen.x, st.velScreen.y, 0).normalize(), Math.min(1, dt * 8)).normalize();
 
     // accumulation: presence alone barely registers, sustained speed builds instability
     const gain = st.hover * (0.012 + Math.min(st.speed, 5) * 0.09) * (active ? 1 : 0.12);
@@ -853,15 +816,14 @@
     // rough him up enough and he comes apart at the joints
     if (st.energy > 0.75 && Math.random() < dt * (st.energy - 0.65) * 0.5 && dance.collapse()) st.energy *= 0.6;
 
-    // glitch pulses: rare at rest, frequent under pressure, lingering after
-    const rate = (0.1 + st.energy * 1.2 + Math.min(st.speed, 4) * 0.4 * st.hover) * (reduced ? 0.4 : 1);
-    if (Math.random() < rate * dt) st.glitch = Math.max(st.glitch, 0.3 + Math.random() * 0.7);
-    st.glitch *= Math.exp(-dt * 7);
-
     // the beat, then the pose it asks for, then where that puts every bone
     beat.update(dt, now);
     const bs = beat.state;
-    danceCtx.beat = bs.beat; danceCtx.bpm = bs.bpm; danceCtx.vibe = bs.vibe; danceCtx.energy = bs.energy; danceCtx.going = !!bs.going; danceCtx.t = t;
+    danceCtx.beat = bs.beat; danceCtx.bpm = bs.bpm; danceCtx.vibe = bs.vibe; danceCtx.energy = bs.energy; danceCtx.going = !!bs.going; danceCtx.t = t; danceCtx.style = bs.style; danceCtx.signature = bs.signature;
+    // hearing: what the microphone (or the tab) is picking up, once he's found the beat in it
+    const hearing = !!bs.listening && bs.locked;
+    danceCtx.hit = hearing ? bs.hit : 0;
+    if (bs.drop) { bs.drop = false; dance.drop(); st.pulse = 1; newPalette(); }
     danceCtx.lookX += ((pointer.inside ? pointer.ndc.x : 0) - danceCtx.lookX) * Math.min(1, dt * 3);
     danceCtx.lookY += ((pointer.inside ? pointer.ndc.y - 0.55 : 0) - danceCtx.lookY) * Math.min(1, dt * 3);
     const moved = dance.step(dt, danceCtx);
@@ -871,12 +833,15 @@
     boneTex.needsUpdate = true;
     heapMax = 0;
     for (let i = 0; i < rig.NB - 1; i++) heapMax = Math.max(heapMax, moved.heap[i]);
-    if (moved.landed) { st.glitch = Math.max(st.glitch, 0.8); st.pulse = Math.max(st.pulse, 0.6); }
+    if (moved.landed) st.pulse = Math.max(st.pulse, 0.6);
     // dust comes loose while he's in pieces
     st.loose += ((moved.down ? 0.35 : 0) - st.loose) * Math.min(1, dt * 4);
 
     // pulls back quickly when he reaches out of shot, and comes back in slowly
-    if (!(SK.debug && SK.debug.freeCam)) frameHim(Math.min(1, dt * 1.6));
+    if (!(SK.debug && SK.debug.freeCam)) {
+      frameHim(Math.min(1, dt * 1.6));
+      camera.position.z = view.dist * (1 - 0.022 * (bs.going ? bs.bar * bs.energy : 0));     // a small push in on the first beat of the bar
+    }
 
     // slow sway plus pointer parallax
     const tx = pointer.inside ? pointer.ndc.x : 0, ty = pointer.inside ? pointer.ndc.y : 0;
@@ -904,35 +869,35 @@
     st.velWorld.multiplyScalar(Math.exp(-dt * 4));
     stepPeers(dt, now);
 
-    // the music gets into everything a little: louder songs shake the picture more
+    // the music gets into everything a little: louder songs loosen the dust more
     const drive = bs.going ? bs.energy : 0;
-    const energy = Math.max(st.energy, drive * 0.16);
-    const kick = bs.going ? bs.kick * (0.35 + 0.65 * bs.energy) * (1 - 0.6 * Math.min(1, st.energy)) : 0;
+    const energy = Math.max(st.energy, drive * 0.16 + (hearing ? bs.bass * 0.1 : 0));
+    // the clock's beat, or a drum he really heard, whichever is hitting harder
+    const kick = bs.going ? Math.max(bs.kick * (0.35 + 0.65 * bs.energy), hearing ? bs.hit * (0.4 + 0.6 * bs.bass) : 0) * (1 - 0.6 * Math.min(1, st.energy)) : 0;
+    if (bs.going && bs.kick > 0.97) st.pulse = Math.max(st.pulse, 0.1 + 0.2 * bs.energy);
     if (bs.going && bs.bar > 0.97) {
-      st.pulse = Math.max(st.pulse, 0.25 + 0.4 * bs.energy);
+      st.pulse = Math.max(st.pulse, 0.3 + 0.5 * bs.energy);
       finalMat.uniforms.uPulseCol.value.copy(Math.floor(bs.beat / 4) % 4 === 0 ? PAL.soft : PAL.primary);
-      if (bs.energy > 0.8 && Math.random() < 0.35) st.glitch = Math.max(st.glitch, 0.6);
+      // every eight bars the whole palette turns, the way lights change with a song
+      const now32 = Math.floor(bs.beat / 32);
+      if (now32 !== verse) { verse = now32; newPalette(); }
     }
 
     const vu = velMat.uniforms;
     vu.uTime.value = t; vu.uDt.value = dt; vu.uEnergy.value = energy; vu.uLoose.value = st.loose;
     st.clickBoom *= Math.exp(-dt * 6);
-    vu.uGlitch.value = st.glitch; vu.uHover.value = st.hover; vu.uSpeed.value = Math.max(st.speed, st.clickBoom * 4);
+    vu.uHover.value = st.hover; vu.uSpeed.value = Math.max(st.speed, st.clickBoom * 4);
     vu.uMouseVel.value.copy(st.velWorld);
-    vu.uKick.value = kick;
-    const pu = posMat.uniforms;
-    pu.uTime.value = t; pu.uDt.value = dt; pu.uGlitch.value = st.glitch; pu.uEnergy.value = energy;
+    vu.uKick.value = kick; vu.uBass.value = hearing ? bs.bass * bs.heard : 0;
+    posMat.uniforms.uDt.value = dt;
     const pt = ptMat.uniforms;
-    pt.uTime.value = t; pt.uEnergy.value = energy; pt.uGlitch.value = st.glitch; pt.uKick.value = kick; pt.uBar.value = bs.going ? bs.bar : 0;
+    pt.uTime.value = t; pt.uEnergy.value = energy; pt.uKick.value = kick;
+    pt.uBeat.value = bs.going ? bs.beat - Math.floor(bs.beat) : 1; pt.uDrive.value = drive; pt.uTreble.value = hearing ? bs.treble : 0; pt.uBar.value = bs.going ? bs.bar : 0;
     const tu = trailMat.uniforms;
-    tu.uTime.value = t % 600; tu.uEnergy.value = energy;
-    tu.uDecay.value = Math.min(0.95, 0.35 + Math.min(energy, 1) * 0.5 + st.glitch * 0.1 + drive * 0.18);
+    tu.uDecay.value = Math.min(0.95, 0.35 + Math.min(energy, 1) * 0.5 + drive * 0.18);
     tu.uDrift.value.set(st.velScreen.x * dt * 0.25 * st.hover, st.velScreen.y * dt * 0.25 * st.hover + 0.0008 * energy);
     const fu = finalMat.uniforms;
-    fu.uTime.value = t % 600; fu.uEnergy.value = energy; fu.uGlitch.value = st.glitch; fu.uSpeed.value = st.speed;
-    fu.uCollapse.value = heapMax * 0.5; fu.uHover.value = st.hover;
-    fu.uMouse.value.set(pointer.ndc.x * 0.5 + 0.5, pointer.ndc.y * 0.5 + 0.5);
-    fu.uSplitDir.value.copy(st.splitDir);
+    fu.uTime.value = t % 600; fu.uEnergy.value = energy;
     st.pulse *= Math.exp(-dt * 3.2);
     fu.uPulse.value = st.pulse;
 
@@ -1009,6 +974,7 @@
       st, pointer, rig, danceCtx,
       step(n, dt) { for (let i = 0; i < (n || 1); i++) { fake += dt || 1 / 60; draw(dt || 1 / 60, fake); } return fake; },
       setText, renderer, ptMat, camera,
+      setPalette(h, off) { const next = makePalette(h, off || 170); for (const key in PAL) PAL[key].copy(next[key]); palTarget = null; tint(); },
       programs: () => renderer.info.programs.map((p) => ({ id: p.id, used: p.usedTimes, diagnostics: p.diagnostics || null })),
       // where the particles are, and how far from home: bounds, and the mean distance for glyphs and for bone dust
       probe() {

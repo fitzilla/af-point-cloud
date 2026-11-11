@@ -1,5 +1,5 @@
-// The controls: picking a song (YouTube's own player, in its own frame), the vibe, tapping the beat,
-// listening, reset and full screen.
+// The controls: picking a song (YouTube's own player, in its own frame), tapping the beat, listening,
+// reset and full screen.
 //
 // The music is never touched: it plays inside YouTube's player, which stays on screen while it plays.
 // Nothing is loaded from YouTube until a song is picked.
@@ -13,14 +13,14 @@
 
   // Tempos here are from memory, good enough to start from; Tap puts him exactly on the beat.
   const SONGS = [
-    { id: "q6-ZGAGcJrk", name: "Spooky Scary Skeletons", by: "The Living Tombstone", bpm: 128, vibe: "hype" },
-    { id: "fNFzfwLM72c", name: "Stayin’ Alive", by: "Bee Gees", bpm: 104, vibe: "groove" },
-    { id: "sOnqjkJTMaA", name: "Thriller", by: "Michael Jackson", bpm: 118, vibe: "groove" },
-    { id: "Gs069dndIYk", name: "September", by: "Earth, Wind & Fire", bpm: 126, vibe: "groove" },
-    { id: "dQw4w9WgXcQ", name: "Never Gonna Give You Up", by: "Rick Astley", bpm: 113, vibe: "groove" },
-    { id: "gAjR4_CbPpQ", name: "Harder, Better, Faster, Stronger", by: "Daft Punk", bpm: 123, vibe: "groove" },
-    { id: "y6120QOlsfU", name: "Sandstorm", by: "Darude", bpm: 136, vibe: "hype" },
-    { id: "tRsQsTMvPNg", name: "Claude FM", by: "lofi, live", bpm: 80, vibe: "chill" },
+    { id: "q6-ZGAGcJrk", name: "Spooky Scary Skeletons", style: "spooky", by: "The Living Tombstone", bpm: 128, vibe: "hype" },
+    { id: "fNFzfwLM72c", name: "Stayin’ Alive", style: "disco", by: "Bee Gees", bpm: 104, vibe: "groove" },
+    { id: "sOnqjkJTMaA", name: "Thriller", style: "spooky", by: "Michael Jackson", bpm: 118, vibe: "groove" },
+    { id: "Gs069dndIYk", name: "September", style: "disco", by: "Earth, Wind & Fire", bpm: 126, vibe: "groove" },
+    { id: "dQw4w9WgXcQ", name: "Never Gonna Give You Up", style: "pop", by: "Rick Astley", bpm: 113, vibe: "groove" },
+    { id: "OPf0YbXqDm0", name: "Uptown Funk", style: "disco", by: "Mark Ronson", bpm: 115, vibe: "groove" },
+    { id: "y6120QOlsfU", name: "Sandstorm", style: "rave", by: "Darude", bpm: 136, vibe: "hype" },
+    { id: "tRsQsTMvPNg", name: "Claude FM", style: "chill", by: "lofi, live", bpm: 80, vibe: "chill" },
   ];
 
   // ---------- cards: one open at a time; click away or Esc closes ----------
@@ -39,7 +39,7 @@
 
   // ---------- the first-visit nudge: comes and goes at the top until they do something ----------
   const hint = $("hint"), hintText = $("hint-text");
-  const HINTS = ["Pick a song", "Type something"];
+  const HINTS = ["Pick a song", "Type something", "Poke him"];
   let hintTimer = 0, hintN = 0;
   function hintCycle(on) {
     if (on) hintText.textContent = HINTS[hintN++ % HINTS.length];
@@ -103,7 +103,7 @@
     show(null);
     tube.hidden = false;
     nowEl.textContent = current.name ? `${current.name} · ${current.by}` : "Loading…";
-    beat.setSong({ title: current.name || "", bpm: current.bpm, vibe: current.vibe });
+    beat.setSong({ title: current.name ? `${current.name} ${current.by}` : "", bpm: current.bpm, vibe: current.vibe, style: current.style });
     paint();
     try {
       const url = new URL(location.href);
@@ -135,6 +135,8 @@
     tube.hidden = true;
   }
   $("tube-close").addEventListener("click", stopSong);
+  // he keeps time by tempo until he's allowed to hear: the offer sits under the player
+  $("tube-listen").addEventListener("click", () => show($("card-listen")));
 
   const list = $("songs");
   for (const song of SONGS) {
@@ -163,17 +165,15 @@
   const linked = videoId(params.get("v"));
   if (linked) play(SONGS.find((s) => s.id === linked) || { id: linked }, false);
 
-  // ---------- vibe, tap, listen ----------
-  const vibeBtn = $("vibe"), tapBtn = $("tap"), listenBtn = $("listen"), listenNote = $("listen-note");
-  const VIBES = ["auto", "chill", "groove", "hype"];
+  // ---------- tap, listen ----------
+  const tapBtn = $("tap"), listenBtn = $("listen"), listenNote = $("listen-note");
   function paint() {
-    vibeBtn.lastElementChild.textContent = bs.choice === "auto" ? `Auto · ${bs.suggested}` : bs.choice;
     tapBtn.lastElementChild.textContent = `Tap · ${Math.round(bs.bpm)}`;
     listenBtn.setAttribute("aria-pressed", String(!!bs.listening));
     listenBtn.lastElementChild.textContent = bs.listening ? (bs.locked ? "Listening" : "Listening…") : "Listen";
     $("listen-off").hidden = !bs.listening;
+    $("tube-listen").hidden = !!bs.listening || listenBtn.hidden;
   }
-  vibeBtn.addEventListener("click", () => { beat.setChoice(VIBES[(VIBES.indexOf(bs.choice) + 1) % VIBES.length]); paint(); vibeBtn.blur(); });
   function tap() {
     beat.tap(performance.now() / 1000);
     // no song? tapping is enough to get him going
