@@ -234,7 +234,7 @@
 
   // ---------- tap, and the two switches: Listen and Copy me ----------
   // A switch says, while it's off, what turning it on will use; while it's on, what it's doing.
-  const tapBtn = $("tap"), dockEl = $("dock"), put = (el, text) => { if (el.textContent !== text) el.textContent = text; };
+  const songBtn = $("song"), tapBtn = $("tap"), dockEl = $("dock"), put = (el, text) => { if (el.textContent !== text) el.textContent = text; };
   const listenBtn = $("listen"), listenSay = $("listen-say"), listenNote = $("listen-note");
   // sharing a tab's sound is a desktop Chrome and Edge thing; elsewhere the switch goes straight to the mic
   const canTab = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) && !matchMedia("(pointer: coarse)").matches;
@@ -247,8 +247,13 @@
     const on = !!bs.listening;
     listenBtn.setAttribute("aria-checked", String(on));
     listenBtn.setAttribute("aria-busy", String(asking || (on && !bs.locked)));
+    // no song yet: picking one is the first thing to do, and hearing it comes after
+    const songless = tube.hidden && !on;
+    songBtn.classList.toggle("primary", songless);
+    put(songBtn.lastElementChild, songless ? "Pick a song" : "Songs");
+    listenBtn.classList.toggle("waiting", songless && !asking);
     const msg = performance.now() < listenUntil ? listenMsg : "";
-    put(listenSay, msg || (on ? (bs.locked ? "On the real beat" : "Finding the beat…") : bs.playing ? "Guessing the beat" : "Uses your mic"));
+    put(listenSay, msg || (on ? (bs.locked ? "On the real beat" : "Finding the beat…") : songless ? "Pick a song first" : bs.playing ? "Guessing the beat" : "Uses your mic"));
     listenBtn.classList.toggle("nudge", !on && !asking && bs.playing && !tube.hidden);
     // how tall the dock is (the cards and the player sit above it), and how much of the bottom of the
     // picture is covered in the middle, where he is: he moves up to dance in what's left
@@ -292,6 +297,7 @@
   listenBtn.addEventListener("click", () => {
     if (bs.listening) { beat.stop(); sayListen("Back to guessing", 3); return; }
     if (asking) return;
+    if (tube.hidden) { show($("card-song")); return; }      // nothing to hear yet: choose something first
     if (canTab) show(openCard === $("card-listen") ? null : $("card-listen"));
     else listen("mic", "switch");
   });

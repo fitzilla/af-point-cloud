@@ -101,6 +101,13 @@ body:not(.ready) #title, body:not(.ready) .dock { opacity: 0; transition: none; 
 .key:hover, .key[aria-expanded="true"] { background: color-mix(in srgb, var(--tint) 13%, transparent); }
 .key b { font-size: 17px; font-weight: 500; line-height: 18px; letter-spacing: 0; }
 .key.small { width: 48px; }
+/* before a song: picking one is the thing to do, so Songs is the filled button and Listen waits its turn */
+.key.primary { width: 112px; background: var(--tint); color: #020604; font-weight: 500; }
+.key.primary:hover { background: var(--tint); filter: brightness(1.12); }
+.key.primary svg { animation: bob 1.6s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateY(-2px); } }
+.tile.waiting { opacity: 0.45; }
+.tile.waiting:hover { opacity: 0.7; }
 .phone-only { display: none; }
 .rule { width: 1px; margin: 10px 4px; background: rgba(255, 255, 255, 0.1); }
 #tap.hit b { animation: tapped 0.25s ease-out; }
@@ -248,7 +255,7 @@ body:not(.ready) #title, body:not(.ready) .dock { opacity: 0; transition: none; 
 }
 @media (prefers-reduced-motion: reduce) {
   #hint, #title, .card, .card.open, .tile, .knob, .knob i { transition: none; }
-  #hint b, #tap.hit b, .tile.nudge, .tile[aria-busy="true"] .knob i { animation: none; }
+  #hint b, #tap.hit b, .tile.nudge, .tile[aria-busy="true"] .knob i, .key.primary svg { animation: none; }
 }
 </style>
 
@@ -322,6 +329,6 @@ body:not(.ready) #title, body:not(.ready) .dock { opacity: 0; transition: none; 
 <script src="js/mirror.js?v=828cd473"></script>
 <script src="js/dance.js?v=e7773f58"></script>
 <script src="js/stage.js?v=a07aa71a"></script>
-<script src="js/ui.js?v=b75d26e9"></script>
+<script src="js/ui.js?v=d9929d77"></script>
 
 </html>
