@@ -248,7 +248,7 @@
     listenBtn.setAttribute("aria-checked", String(on));
     listenBtn.setAttribute("aria-busy", String(asking || (on && !bs.locked)));
     const msg = performance.now() < listenUntil ? listenMsg : "";
-    put(listenSay, msg || (on ? (bs.locked ? "On · he’s on the real beat" : "On · listening for the beat…") : bs.playing ? "Off · he’s guessing. Turn on so he hears it" : "Off · turn on so he hears the music"));
+    put(listenSay, msg || (on ? (bs.locked ? "On the real beat" : "Finding the beat…") : bs.playing ? "Guessing the beat" : "Uses your mic"));
     listenBtn.classList.toggle("nudge", !on && !asking && bs.playing && !tube.hidden);
     // how tall the dock is (the cards and the player sit above it), and how much of the bottom of the
     // picture is covered in the middle, where he is: he moves up to dance in what's left
@@ -275,14 +275,14 @@
   async function listen(kind, via) {
     asking = true;
     show(null);
-    sayListen(kind === "tab" ? "Pick this tab, tick “share tab audio”" : "Allow the mic, turn the music up", 60);
+    sayListen(kind === "tab" ? "Tick “share audio”" : "Allow the mic", 60);
     try {
       await beat.listen(kind);
       listenUntil = 0;
       SK.track("listen_started", { kind, via });
       listenNote.textContent = "";
     } catch (e) {
-      const why = e && e.name === "NotAllowedError" ? "No mic allowed, so he’s guessing" : (e && e.message) || "That didn’t work";
+      const why = e && e.name === "NotAllowedError" ? "Mic not allowed" : "That didn’t work";
       sayListen(why, 6);
       listenNote.textContent = why;
     }
@@ -290,7 +290,7 @@
     paint();
   }
   listenBtn.addEventListener("click", () => {
-    if (bs.listening) { beat.stop(); sayListen("Off · back to guessing the beat", 3); return; }
+    if (bs.listening) { beat.stop(); sayListen("Back to guessing", 3); return; }
     if (asking) return;
     if (canTab) show(openCard === $("card-listen") ? null : $("card-listen"));
     else listen("mic", "switch");
@@ -303,7 +303,7 @@
 
   // ---------- copy me: the webcam, and he does what you do ----------
   const mirror = SK.mirror, copyBtn = $("copy"), copySay = $("copy-say"), camEl = $("cam"), camNote = $("cam-note");
-  const COPY_SAYS = { asking: "Allow the camera…", loading: "On · loading his eyes…", looking: "On · step back so he can see you", copying: "On · he’s copying you" };
+  const COPY_SAYS = { asking: "Allow the camera", loading: "Loading his eyes…", looking: "Step back a bit", copying: "Copying you" };
   const CAM_SAYS = { loading: "Loading his eyes", looking: "Step back", copying: "Copying you" };
   let copyMsg = "", copyUntil = 0, copied = false;
   if (!mirror || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) copyBtn.hidden = true;
@@ -313,7 +313,7 @@
     copyBtn.setAttribute("aria-busy", String(status === "asking" || status === "loading"));
     camEl.hidden = !on;
     const msg = performance.now() < copyUntil ? copyMsg : "";
-    put(copySay, msg || COPY_SAYS[status] || "Off · turn on so he copies your moves");
+    put(copySay, msg || COPY_SAYS[status] || "Uses your camera");
     put(camNote, CAM_SAYS[status] || "");
     // once per visit: it found someone, so it works for them
     if (on && status === "copying" && !copied) { copied = true; SK.track("copy_me_seen", {}); }
@@ -328,14 +328,14 @@
       await mirror.load();
     } catch (e) {
       const name = e && e.name;
-      copyMsg = name === "NotAllowedError" ? "No permission, so he can’t see you" : name === "NotFoundError" || name === "OverconstrainedError" ? "He can’t find a camera" : name === "NotReadableError" ? "Something else is using the camera" : (e && e.message) || "That didn’t work";
+      copyMsg = name === "NotAllowedError" ? "Camera not allowed" : name === "NotFoundError" || name === "OverconstrainedError" ? "No camera found" : name === "NotReadableError" ? "Camera’s in use" : /eyes/.test(e && e.message) ? "His eyes didn’t load" : "That didn’t work";
       copyUntil = performance.now() + 6000;
     }
     paintCopy();
   }
   copyBtn.addEventListener("click", () => {
     if (mirror.status === "asking") return;
-    if (mirror.guide.on) { mirror.stop(); copyMsg = "Off · camera’s off"; copyUntil = performance.now() + 2500; paintCopy(); return; }
+    if (mirror.guide.on) { mirror.stop(); copyMsg = "Camera off"; copyUntil = performance.now() + 2500; paintCopy(); return; }
     copy();
   });
   setInterval(paintCopy, 500);
