@@ -1,0 +1,21 @@
+index.html
+  s_2e47aa980f998f::t_fbffa5138f37a7 104-110,258,332
+js/ui.js
+  s_2e47aa980f998f::t_fbffa5138f37a7 237,250-254,256,300
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d8090181a0d7f6ff2039dee5ee3cac0390084164",
+  "prompts": {},
+  "sessions": {
+    "s_2e47aa980f998f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b3c7448d-e150-4670-85f4-faba3ba61633",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Aaron Fitzsimmons <afitzsimmons@stora.co>"
+    }
+  }
+}
