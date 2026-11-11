@@ -10,7 +10,7 @@
   const LIB = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.2";
   const MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
   // the tracker's numbering (its left and right are the person's own)
-  const NOSE = 0, EAR_L = 7, EAR_R = 8, SH_L = 11, SH_R = 12, EL_L = 13, EL_R = 14, WR_L = 15, WR_R = 16, IX_L = 19, IX_R = 20;
+  const NOSE = 0, EYE_L = 2, EYE_R = 5, EAR_L = 7, EAR_R = 8, SH_L = 11, SH_R = 12, EL_L = 13, EL_R = 14, WR_L = 15, WR_R = 16, IX_L = 19, IX_R = 20;
   const HIP_L = 23, HIP_R = 24, KN_L = 25, KN_R = 26, AN_L = 27, AN_R = 28;
   const DEPTH = 0.75;      // toward and away from the camera is the tracker's shakiest guess: believe three quarters of it
 
@@ -121,11 +121,17 @@
 
     // head: the ears give the tilt, and where the nose sits between them gives the turn and the nod
     const eL = square(at(EAR_R, 1)), eR = square(at(EAR_L, 1)), ears = sub(eL, eR), nose = sub(square(at(NOSE, 1)), mid(eL, eR));
-    want.nrz = clamp(Math.atan2(ears[1], ears[0]) - roll, -0.7, 0.7);
+    // The tilt is read straight off the picture, where the tracker is surest: the slope of the line
+    // through their eyes (and their ears, when it can see them), against the slope of their shoulders.
+    // A little is added, because a tilt reads smaller on a skull than on a face.
+    const slope = (l, r) => Math.atan2(-(image[r].y - image[l].y), -(image[r].x - image[l].x) * aspect);      // l, r: their left and right
+    const earsSeen = clear(EAR_L, EAR_R);
+    const headSlope = slope(EYE_L, EYE_R) * (1 - 0.5 * earsSeen) + slope(EAR_L, EAR_R) * 0.5 * earsSeen;
+    want.nrz = clamp((headSlope - slope(SH_L, SH_R)) * 1.25, -0.9, 0.9);
     // (how far the nose is off centre against how wide apart the ears look: no depth needed, which is as well)
     want.nry = clamp(Math.atan2(nose[0] * 1.5, Math.abs(ears[0]) + 0.02) * 1.4 - (want.hry + want.cry), -1.2, 1.2);
     want.nrx = clamp(Math.atan2(-nose[1], Math.max(0.02, nose[2])) - 0.3 - bend, -0.7, 0.8);
-    g.wHead += (clear(NOSE, EAR_L, EAR_R) - g.wHead) * slow;
+    g.wHead += (clear(NOSE, EYE_L, EYE_R) - g.wHead) * slow;      // (the eyes, not the ears: ears are often half hidden)
 
     // where they are across the picture, in his own size
     const iS = [(image[SH_L].x + image[SH_R].x) / 2, (image[SH_L].y + image[SH_R].y) / 2], iH = [(image[HIP_L].x + image[HIP_R].x) / 2, (image[HIP_L].y + image[HIP_R].y) / 2];
