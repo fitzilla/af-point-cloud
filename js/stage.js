@@ -649,7 +649,8 @@
     pointer.lt = 0;
     st.clickBoom = 1;      // a click blows the particles apart under the cursor,
     const bone = boneUnder(e);
-    if (bone < 0 || !dance.poke(rig.bones[bone].name)) dance.startle();     // and he takes it differently depending on where it lands
+    if (bone >= 0 && dance.poke(rig.bones[bone].name)) { if (SK.ui) SK.ui.acted(); }     // he takes it differently depending on where it lands,
+    else dance.startle();                                                               // and just jumps if it missed him
     onMove(e);
   }, { passive: true });
   addEventListener("pointerup", (e) => { if (e.pointerType !== "mouse") onLeave(); });
