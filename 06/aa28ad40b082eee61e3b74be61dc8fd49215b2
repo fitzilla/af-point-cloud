@@ -1,0 +1,33 @@
+js/rig.js
+  s_2e47aa980f998f::t_5d5abef2697740 299-301,304,317-318,320-322,326-354
+index.html
+  s_2e47aa980f998f::t_4b8a7968200e93 275,408
+  s_2e47aa980f998f::t_aab5bf879af18f 405
+  s_2e47aa980f998f::t_5d5abef2697740 404,407
+  s_2e47aa980f998f::t_e1fc3d45389d05 298
+js/stage.js
+  s_2e47aa980f998f::t_5d5abef2697740 611
+js/ui.js
+  s_2e47aa980f998f::t_e1fc3d45389d05 235,237
+  s_2e47aa980f998f::t_4b8a7968200e93 413-424
+js/mirror.js
+  s_2e47aa980f998f::t_aab5bf879af18f 64-65,71,80-82
+  s_2e47aa980f998f::t_5d5abef2697740 31,50-60,72,78
+  s_2e47aa980f998f::t_d51608024eee9c 61-63,67-68,73-76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "06aa28ad40b082eee61e3b74be61dc8fd49215b2",
+  "prompts": {},
+  "sessions": {
+    "s_2e47aa980f998f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b3c7448d-e150-4670-85f4-faba3ba61633",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "Aaron Fitzsimmons <afitzsimmons@stora.co>"
+    }
+  }
+}
