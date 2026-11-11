@@ -11,6 +11,10 @@
   const fr = (x) => x - Math.floor(x);
   const sm = (a, b, x) => { const k = Math.min(1, Math.max(0, (x - a) / (b - a))); return k * k * (3 - 2 * k); };
 
+  // arm positions that never change (out to side, forward, elbow bend, elbow sideways, hand): made once
+  const MACARENA = { out: [0.55, 1.15, 0.05, 0, 0], palm: [0.55, 1.2, 0.05, 0, -1.2], cross: [0.1, 0.55, 0, -2.4, 0], head: [2.5, 0, 0, 2.2, 0], hip: [-0.45, 0.5, 0.7, 0, 0], bum: [0.5, -0.25, 0, -1.3, 0] };
+  const LETTERS = { Y: [2.5, 0, 0, 0], M: [2.4, 0, 0, 1.8], A: [3.1, 0, 0, 0.4] };
+
   // ---------- the moves: (beats since it started, pose to fill in, what's going on) ----------
   const MOVES = {
     // weight from foot to foot, arms swinging loose
@@ -195,7 +199,7 @@
     // four beats of clapping overhead before the next go
     ymca(ph, p) {
       //            out to side, forward, elbow bend, elbow sideways  (worked out from where the elbows and hands should be)
-      const Y = [2.5, 0, 0, 0], M = [2.4, 0, 0, 1.8], A = [3.1, 0, 0, 0.4];
+      const { Y, M, A } = LETTERS;
       const set = (L, v) => { p["a" + L + "a"] = v[0]; p["a" + L + "f"] = v[1]; p["a" + L + "b"] = v[2]; p["a" + L + "z"] = v[3]; };
       const c = Math.floor(ph) % 8, h = hit(ph);
       p.snap = 1; p.hy = -0.05 - 0.05 * h; p.jaw = 0.55 * hit(ph, 2); p.kL = p.kR = 0.35;
@@ -284,7 +288,7 @@
       const step = Math.floor(ph) % 16, f = fr(ph);
       //            out to side, forward, elbow bend, elbow sideways, hand
       // (the arms go out a little wide of straight ahead, or from the front there'd be nothing to see)
-      const POSE = { out: [0.55, 1.15, 0.05, 0, 0], palm: [0.55, 1.2, 0.05, 0, -1.2], cross: [0.1, 0.55, 0, -2.4, 0], head: [2.5, 0, 0, 2.2, 0], hip: [-0.45, 0.5, 0.7, 0, 0], bum: [0.5, -0.25, 0, -1.3, 0] };
+      const POSE = MACARENA;
       const at = (n) => (n < 0 ? null : n < 2 ? POSE.out : n < 4 ? POSE.palm : n < 6 ? POSE.cross : n < 8 ? POSE.head : n < 10 ? POSE.hip : POSE.bum);
       const set = (L, v) => { if (v) { p["a" + L + "a"] = v[0]; p["a" + L + "f"] = v[1]; p["a" + L + "b"] = v[2]; p["a" + L + "z"] = v[3]; p["a" + L + "h"] = v[4]; } };
       set("R", at(step)); set("L", at(step - 1));

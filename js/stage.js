@@ -240,7 +240,6 @@
     }
   `;
   const FS_VERT = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
-  const MAXP = 6;   // how many other visitors' cursors can stir him at once
 
   // ---------- GPU simulation: velocity pass (w = accumulated damage) ----------
   const VEL_FRAG = `
@@ -504,8 +503,7 @@
     uTime: { value: 0 }, uDt: { value: 0.016 }, uEnergy: { value: 0 },
     uInit: { value: 1 }, uClick: { value: 0 }, uRadius: { value: 0.3 }, uMotion: { value: MOTION },
     uKick: { value: 0 }, uBass: { value: 0 }, uLoose: { value: 0 },
-    uRayO: { value: V3() }, uRayD: { value: new THREE.Vector3(0, 0, -1) }, uMouseVel: { value: V3() },
-    uPeer: { value: Array.from({ length: MAXP }, () => new THREE.Vector4()) }, uPeerVel: { value: Array.from({ length: MAXP }, V3) },
+    uRayO: { value: V3() }, uRayD: { value: new THREE.Vector3(0, 0, -1) },
   });
   const posMat = fsMat(POS_FRAG, {
     tPos: { value: null }, tVel: { value: null }, tHome: { value: homeTex }, tBones: { value: boneTex },
@@ -614,9 +612,7 @@
   // ---------- interaction state ----------
   const pointer = { ndc: new THREE.Vector2(9, 9), inside: false, lx: 0, ly: 0, lt: 0 };
   const st = {
-    hover: 0, speed: 0, speedTarget: 0, energy: 0, lastMove: -10, clickBoom: 0, pulse: 0, peak: 0, loose: 0,
-    velScreen: new THREE.Vector2(), velScreenTarget: new THREE.Vector2(),
-    velWorld: new THREE.Vector3(), lastHit: null, parX: 0, parY: 0,
+    energy: 0, lastMove: -10, clickBoom: 0, pulse: 0, peak: 0, loose: 0, lastHit: null, parX: 0, parY: 0,
   };
   const overUI = (e) => e.target instanceof Element && !!e.target.closest(".dock, .card, #tube, #cam, #corner");
 
@@ -624,13 +620,6 @@
     const now = performance.now() / 1000;
     const x = e.clientX, y = e.clientY, w = innerWidth, h = innerHeight;
     pointer.ndc.set((x / w) * 2 - 1, -(y / h) * 2 + 1);
-    if (pointer.inside && pointer.lt) {
-      const dt = Math.max(1 / 240, now - pointer.lt);
-      const m = Math.min(w, h);
-      const vx = (x - pointer.lx) / m / dt, vy = -(y - pointer.ly) / m / dt;
-      st.velScreenTarget.set(vx, vy);
-      st.speedTarget = Math.max(st.speedTarget * 0.5, Math.hypot(vx, vy));
-    }
     pointer.inside = true;
     pointer.lx = x; pointer.ly = y; pointer.lt = now;
     st.lastMove = now;
@@ -678,7 +667,7 @@
     return best;
   }
   const rayO = velMat.uniforms.uRayO.value, rayD = velMat.uniforms.uRayD.value;
-  const hit = new THREE.Vector3(), tmpV = new THREE.Vector3();
+  const hit = new THREE.Vector3();
 
   // ---------- typing: whatever you type is what he's made of ----------
   // Backspace edits; Esc (or nothing left) turns him back into symbols.
@@ -727,7 +716,7 @@
   const RELAY = "wss://aaron-cursors.aaron-cursors.workers.dev/ws";
   const MP_URL = params.get("mp") || (RELAY && LIVE ? RELAY : "");
   const peerBox = $("peers"), peers = new Map();
-  const peerU = velMat.uniforms.uPeer.value, peerV = velMat.uniforms.uPeerVel.value, peerP = new THREE.Vector3();
+  const peerP = new THREE.Vector3();
   const mp = { ws: null, tries: 0, sentAt: 0, sx: 9, sy: 9, left: true };
   const num = (v, lim) => (typeof v === "number" && Number.isFinite(v) ? Math.max(-lim, Math.min(lim, v)) : 0);
   function send(m) { if (mp.ws && mp.ws.readyState === 1) mp.ws.send(JSON.stringify(m)); }
@@ -766,7 +755,7 @@
       p = { el, x: num(m.x, 10), y: num(m.y, 10), a: 0 };
       peers.set(m.id, p);
     }
-    Object.assign(p, { tx: num(m.x, 10), ty: num(m.y, 10), vx: num(m.vx, 14), vy: num(m.vy, 14), s: num(m.s, 50), seen: performance.now() / 1000, gone: false });
+    p.tx = num(m.x, 10); p.ty = num(m.y, 10); p.seen = performance.now() / 1000; p.gone = false;
   }
   function peerGone(id, remove) {
     const p = peers.get(id);
@@ -780,24 +769,20 @@
         const moved = Math.abs(hit.x - mp.sx) + Math.abs(hit.y - mp.sy) > 0.003;
         if (now - mp.sentAt > 0.1 && (moved || now - mp.sentAt > 1)) {
           mp.sentAt = now; mp.sx = hit.x; mp.sy = hit.y; mp.left = false;
-          send({ t: "c", x: +hit.x.toFixed(3), y: +hit.y.toFixed(3), vx: +st.velWorld.x.toFixed(2), vy: +st.velWorld.y.toFixed(2), s: +st.speed.toFixed(2) });
+          send({ t: "c", x: +hit.x.toFixed(3), y: +hit.y.toFixed(3) });
         }
       } else if (!mp.left) { mp.left = true; send({ t: "l" }); }
     }
-    let k = 0;
-    const decay = Math.exp(-dt * 4), follow = Math.min(1, dt * 14);
+    const follow = Math.min(1, dt * 14);
     for (const [id, p] of peers) {
       const fresh = !p.gone && now - p.seen < 3;
       p.a += ((fresh ? 1 : 0) - p.a) * Math.min(1, dt * 5);
       if (!fresh && p.a < 0.01) { p.el.style.opacity = "0"; if (now - p.seen > 60) peerGone(id, true); continue; }
       p.x += (p.tx - p.x) * follow; p.y += (p.ty - p.y) * follow;
-      p.vx *= decay; p.vy *= decay; p.s *= decay;
       peerP.set(p.x, p.y, 0).applyMatrix4(sculpture.matrixWorld).project(camera);
       p.el.style.transform = `translate(${((peerP.x * 0.5 + 0.5) * innerWidth).toFixed(1)}px, ${((0.5 - peerP.y * 0.5) * innerHeight).toFixed(1)}px)`;
       p.el.style.opacity = (p.a * 0.9).toFixed(2);
-      if (k < MAXP) { peerU[k].set(p.x, p.y, p.a, p.s); peerV[k].set(p.vx, p.vy, 0); k++; }
     }
-    for (; k < MAXP; k++) peerU[k].z = 0;
   }
   connect();
 
@@ -809,11 +794,6 @@
     // a minute after the last key he drifts back to symbols
     if (typed && now - lastKey > 60) { typed = ""; setText(""); }
 
-    st.hover += ((pointer.inside ? 1 : 0) - st.hover) * Math.min(1, dt * (pointer.inside ? 6 : 2.5));
-    st.speed += (st.speedTarget - st.speed) * Math.min(1, dt * 12);
-    st.speedTarget *= Math.exp(-dt * 7);
-    st.velScreen.lerp(st.velScreenTarget, Math.min(1, dt * 10));
-    st.velScreenTarget.multiplyScalar(Math.exp(-dt * 7));
 
     // the pointer doesn't disturb him: he watches it instead (see dance.js). What's left of `energy`
     // is the little rattle each typed key gives him, which settles straight away.
@@ -867,14 +847,9 @@
     rayD.copy(raycaster.ray.direction).transformDirection(inv);
     if (pointer.inside && Math.abs(rayD.z) > 1e-4) {
       hit.copy(rayD).multiplyScalar(-rayO.z / rayD.z).add(rayO);
-      if (st.lastHit) {
-        tmpV.copy(hit).sub(st.lastHit).divideScalar(Math.max(dt, 1 / 240));
-        if (tmpV.length() > 14) tmpV.setLength(14);
-        st.velWorld.lerp(tmpV, Math.min(1, dt * 12));
-      } else st.lastHit = new THREE.Vector3();
+      if (!st.lastHit) st.lastHit = new THREE.Vector3();
       st.lastHit.copy(hit);
     }
-    st.velWorld.multiplyScalar(Math.exp(-dt * 4));
     stepPeers(dt, now);
 
     // the music gets into everything a little: louder songs loosen the dust more

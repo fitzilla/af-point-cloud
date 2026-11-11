@@ -236,7 +236,11 @@
     }
     // once a frame: look at the newest picture (thirty times a second at most) and bring the guide up to date
     function tick(now, dt) {
-      if (g.on && tracker && video && video.readyState >= 2 && video.currentTime !== lastFrame && now - lastRun > 1 / 32) {
+      // (nothing is looked at while the page is hidden; and the face and the hands take turns, so the
+      // body tracker never shares a frame with both of them)
+      const awake = typeof document === "undefined" || !document.hidden;
+      let extra = false;
+      if (awake && g.on && tracker && video && video.readyState >= 2 && video.currentTime !== lastFrame && now - lastRun > 1 / 32) {
         const since = Math.min(0.2, now - lastRun);
         lastRun = now; lastFrame = video.currentTime;
         try {
@@ -249,7 +253,7 @@
         } catch (e) { if (++fails > 8) { stop(); status = "failed"; } }
         // the jaw, fifteen times a second: plenty for a mouth, and half the work
         if (faces && now - lastFace > 1 / 16) {
-          lastFace = now;
+          lastFace = now; extra = true;
           try {
             const shapes = faces.detectForVideo(video, now * 1000 + 0.5).faceBlendshapes;
             const open = shapes && shapes[0] && shapes[0].categories.find((c) => c.categoryName === "jawOpen");
@@ -259,7 +263,7 @@
       }
       // their hands, twelve times a second. A fist's fingertips are about as far from the wrist as its
       // knuckles are; an open hand's are nearly twice as far.
-      if (g.on && hands && video && video.readyState >= 2 && now - lastHands > 1 / 12) {
+      if (awake && !extra && g.on && hands && video && video.readyState >= 2 && now - lastHands > 1 / 12) {
         lastHands = now;
         try {
           const res = hands.detectForVideo(video, now * 1000 + 0.25);

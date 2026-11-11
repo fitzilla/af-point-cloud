@@ -116,7 +116,6 @@ body:not(.ready) #title, body:not(.ready) .dock, body:not(.ready) #corner { opac
 .tile.waiting:hover { opacity: 0.7; }
 .phone-only { display: none; }
 .rule { width: 1px; margin: 10px 4px; background: rgba(255, 255, 255, 0.1); }
-@keyframes tapped { from { transform: scale(1.5); } }
 #fs .exit { display: none; }
 #fs[aria-pressed="true"] .exit { display: inline; }
 #fs[aria-pressed="true"] .enter { display: none; }
@@ -246,6 +245,7 @@ body:not(.ready) #title, body:not(.ready) .dock, body:not(.ready) #corner { opac
 .tips { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; text-transform: none; letter-spacing: 0.04em; }
 .tips li { opacity: 0.85; }
 .tips b { font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; }
+.card p.ver { margin-top: 4px; min-height: 0; opacity: 0.5; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; }
 .card a.out { display: flex; align-items: center; justify-content: space-between; min-height: 40px; margin-top: 12px; padding: 0 12px; background: var(--tint); color: #020604; border-radius: 8px; font-weight: 500; text-decoration: none; }
 .card a.out:hover { filter: brightness(1.12); }
 .card a.out:focus-visible { outline: 1px solid var(--tint); outline-offset: 2px; }
@@ -365,6 +365,7 @@ body:not(.ready) #title, body:not(.ready) .dock, body:not(.ready) #corner { opac
     <li><b>Poke him</b> and see what happens</li>
   </ul>
   <p>Made by Aaron and Claude.</p>
+  <p class="ver">Version 48 · 11 Nov 2026</p>
   <a class="out" href="https://www.linkedin.com/in/aaron-fitzsimmons-533a1312/" target="_blank" rel="noopener">Aaron on LinkedIn<span aria-hidden="true">&#8599;</span></a>
 </div>
 
@@ -402,9 +403,9 @@ body:not(.ready) #title, body:not(.ready) .dock, body:not(.ready) #corner { opac
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="js/beat.js?v=c18b7a2d"></script>
 <script src="js/rig.js?v=975f05fd"></script>
-<script src="js/mirror.js?v=39ca54db"></script>
-<script src="js/dance.js?v=d6248164"></script>
-<script src="js/stage.js?v=83fd0cf8"></script>
+<script src="js/mirror.js?v=06918e51"></script>
+<script src="js/dance.js?v=402de775"></script>
+<script src="js/stage.js?v=27f4ae11"></script>
 <script src="js/ui.js?v=e964d113"></script>
 
 </html>
