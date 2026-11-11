@@ -99,6 +99,49 @@
       p.air = 0.24 * Math.pow(a, 0.7); p.hy = -0.03 - 0.1 * hit(ph, 4); p.kL = p.kR = 0.35; p.fLy = p.fRy = 0.03 * a;
       p.aLa = p.aRa = 2.75 + 0.15 * sn(ph, 1); p.aLz = p.aRz = 0.2; p.nrx = -0.15 + 0.2 * hit(ph); p.jaw = 0.5 * a;
     },
+    // ---------- the heavy end: rock and metal ----------
+    // horns up: both arms to the sky, leaning back and screaming at the ceiling
+    horns(ph, p) {
+      const h = hit(ph, 2);
+      p.aLa = p.aRa = 2.45 + 0.3 * h; p.aLb = p.aRb = 0.1; p.aLh = p.aRh = -0.5 * h;
+      p.crx = -0.18 - 0.1 * h; p.srx = -0.08; p.nrx = -0.45 + 0.55 * h; p.jaw = 0.5 + 0.5 * h;
+      p.fLx = 0.2; p.fRx = -0.2; p.kL = p.kR = 0.6; p.hy = -0.12 - 0.08 * h;
+    },
+    // the pit: barging shoulder first from side to side, fists up, stamping
+    mosh(ph, p) {
+      const s = Math.tanh(3 * sn(ph, 2)), h = hit(ph, 2);
+      p.hx = 0.27 * s; p.fLx = 0.14 + 0.2 * s; p.fRx = -0.14 + 0.2 * s; p.fLy = 0.16 * hit(ph / 2, 3); p.fRy = 0.16 * hit(ph / 2 + 0.5, 3);
+      p.crz = -0.26 * s; p.srz = -0.1 * s; p.cry = 0.3 * s; p.crx = 0.22; p.nrx = 0.3 + 0.3 * h; p.nrz = 0.15 * s;
+      p.aLf = p.aRf = 0.55; p.aLb = p.aRb = 2.0 - 0.3 * h; p.aLa = p.aRa = 0.45; p.hy = -0.16 - 0.06 * h; p.kL = p.kR = 0.5; p.jaw = 0.6 * h;
+    },
+    // bent double, hands on his knees, his skull going round like a helicopter
+    hairWhip(ph, p) {
+      const a = TAU * ph / 2;
+      p.crx = 0.5; p.srx = 0.25; p.hrx = 0.12; p.hz = -0.12; p.nrx = 0.25 + 0.55 * Math.cos(a); p.nrz = 0.7 * Math.sin(a); p.crz = 0.16 * Math.sin(a); p.cry = 0.12 * Math.cos(a);
+      p.aLa = p.aRa = 0.3; p.aLf = p.aRf = 0.75; p.aLb = p.aRb = 0.35; p.fLx = 0.24; p.fRx = -0.24; p.kL = p.kR = 0.7; p.hy = -0.3 - 0.04 * hit(ph); p.jaw = 0.5;
+    },
+    // the solo: down low, leaning right back, shredding at the sky
+    kneeSlide(ph, p) {
+      const fast = sn(ph, 0.25), bendy = 0.5 + 0.5 * sn(ph, 4);
+      p.hy = -0.62; p.hz = 0.12; p.hrx = -0.25; p.srx = -0.22; p.crx = -0.22 - 0.1 * bendy; p.nrx = -0.5; p.jaw = 0.9; p.kL = p.kR = 0.35; p.fLx = 0.16; p.fRx = -0.16;
+      p.aLa = 1.15 + 0.1 * bendy; p.aLf = 0.5; p.aLz = 0.4; p.aLh = 0.4 * sn(ph, 0.5);         // the neck of the guitar
+      p.aRa = 0.3; p.aRf = 0.6; p.aRb = 1.25 + 0.4 * fast; p.aRh = 0.5 * fast;                // and the hand that's doing the damage
+    },
+    // across the stage on one leg, the other kicking, strumming all the way
+    duckWalk(ph, p) {
+      const side = Math.floor(ph / 4) % 2 ? -1 : 1, k = hit(ph, 2), hop = Math.abs(Math.sin(Math.PI * ph));
+      p.hx = 0.32 * sn(ph, 8); p.fLx = p.hx; p.fRx = p.hx; p.air = 0.07 * hop; p.hy = -0.22; p.crx = 0.3; p.nrx = -0.1 + 0.5 * k; p.cry = 0.3 * side; p.hry = 0.25 * side;
+      const kick = side > 0 ? "R" : "L";
+      p["f" + kick + "z"] = 0.25 + 0.3 * k; p["f" + kick + "y"] = 0.22 + 0.16 * k; p["k" + kick] = 0;
+      p.aLa = 1.05; p.aLf = 0.5; p.aLz = 0.35; p.aRa = 0.25; p.aRf = 0.55; p.aRb = 1.2 + 0.45 * sn(ph, 0.5); p.jaw = 0.4 * k;
+    },
+    // half time: both fists right up, then brought down like a hammer on every other beat
+    hammer(ph, p) {
+      const h = hit(ph / 2, 4), up = 1 - h;
+      p.aLf = p.aRf = 0.7 + 2.0 * up; p.aLa = p.aRa = 0.25; p.aLb = p.aRb = 0.25 + 0.5 * h;
+      p.crx = -0.12 * up + 0.5 * h; p.srx = 0.2 * h; p.nrx = -0.3 * up + 0.6 * h; p.hy = -0.06 - 0.3 * h; p.jaw = 0.3 + 0.7 * h;
+      p.fLx = 0.2; p.fRx = -0.2; p.kL = p.kR = 0.6; p.snap = 1;
+    },
     fistPump(ph, p) {
       const h = hit(ph, 2);
       p.aRa = 1.1 + 1.5 * h; p.aRz = 0.9 * (1 - h); p.aRf = 0.2; p.aLa = 0.3; p.aLb = 0.9;
@@ -299,13 +342,15 @@
     egyptian: 0.5, rattle: 0.5, zombie: 0.5, twist: 0.6, discoPoint: 0.6, shimmy: 0.6, kneeKnock: 0.6, sprinkler: 0.6, macarena: 0.6, bigFish: 0.65,
     charleston: 0.7, ymca: 0.7, dab: 0.7, airDrums: 0.75, floss: 0.8, runningMan: 0.8, shuffle: 0.8, windmill: 0.8, armsWave: 0.8, fistPump: 0.85,
     gangnam: 0.85, headbang: 0.9, kicks: 0.9, headPop: 0.9, pogo: 1, bean: 0.55, hipThrust: 0.65, routine: 0.7, griddy: 0.75, stayinAlive: 0.65,
+    horns: 0.85, mosh: 1, hairWhip: 0.9, kneeSlide: 0.8, duckWalk: 0.85, hammer: 0.9,
   };
   // what kind of music it is decides which dances are on the table (beat.js guesses the kind from the title)
   const STYLES = {
     chill: ["sway", "nodSnap", "armWave", "hipSway", "stepTouch", "moonwalk", "rickSway"],
     disco: ["stayinAlive", "discoPoint", "stepTouch", "twist", "shimmy", "sideClap", "sprinkler", "hipSway", "kneeKnock", "armsWave", "charleston", "armWave", "hipThrust", "routine", "bean"],
     pop: ["stepTouch", "sideClap", "floss", "rickSway", "twist", "shimmy", "runningMan", "robot", "egyptian", "bigFish", "sprinkler", "kneeKnock", "armsWave", "headPop", "dab", "moonwalk", "sway", "pogo", "griddy", "routine", "bean", "hipThrust"],
-    rock: ["headbang", "airDrums", "windmill", "fistPump", "pogo", "kicks", "twist", "kneeKnock", "headPop", "nodSnap", "stepTouch", "hipThrust", "bean"],
+    rock: ["headbang", "airDrums", "windmill", "duckWalk", "kneeSlide", "horns", "fistPump", "hammer", "pogo", "kicks", "twist", "kneeKnock", "headPop", "nodSnap", "stepTouch", "hipThrust", "hairWhip"],
+    metal: ["headbang", "hairWhip", "horns", "mosh", "hammer", "kneeSlide", "airDrums", "windmill", "duckWalk", "fistPump", "pogo"],
     rave: ["fistPump", "shuffle", "runningMan", "bigFish", "pogo", "armsWave", "robot", "floss", "headPop", "bounce", "armWave", "griddy"],
     hiphop: ["bounce", "armWave", "dab", "robot", "runningMan", "nodSnap", "floss", "moonwalk", "kneeKnock", "sway", "griddy", "hipThrust"],
     latin: ["hipSway", "stepTouch", "shimmy", "sideClap", "twist", "armsWave", "sway", "hipThrust"],
@@ -316,13 +361,21 @@
   // watch he doesn't have, and the odd yawn
   function idle(t, p, c) {
     p.hy = -0.02 + 0.006 * Math.sin(t * 1.6); p.crx = 0.02 * Math.sin(t * 1.6); p.hx = 0.04; p.hrz = 0.04;
-    p.nry = c.lookX * 0.7; p.nrx = -c.lookY * 0.4; p.cry = c.lookX * 0.15;
+    // he watches the pointer: head, shoulders and a bit of a lean toward it
+    p.nry = c.lookX * 1.0; p.nrx = -c.lookY * 0.6; p.cry = c.lookX * 0.3; p.hry = c.lookX * 0.12; p.srz = -c.lookX * 0.07; p.hx += c.lookX * 0.05;
     p.fRy = 0.045 * hit(t * 1.7, 6); p.fRz = 0.1;
     p.aLa = 0.7; p.aLz = -1.7;
     const watch = sm(0, 0.5, fr(t / 11) * 11 - 6) * (1 - sm(2.4, 2.9, fr(t / 11) * 11 - 6));
     p.aRf = 1.1 * watch; p.aRb = 0.12 + 1.5 * watch; p.nrx += 0.4 * watch; p.nry *= 1 - watch;
     const yawn = sm(0, 1, fr(t / 17) * 17 - 12) * (1 - sm(1.8, 2.6, fr(t / 17) * 17 - 12));
     p.jaw = 0.95 * yawn; p.nrx -= 0.2 * yawn;
+    // and reaches for it with whichever hand is on its side
+    for (const [L, s] of [["L", 1], ["R", -1]]) {
+      const k = (c.ptrW || 0) * sm(0.15, 0.7, s * c.ptrX);
+      if (k <= 0) continue;
+      const a = "a" + L, up = Math.min(2.0, Math.max(0.25, Math.atan2(s * (c.ptrX - s * 0.37), -(c.ptrY - 1.1))));      // not so high that the camera has to back off
+      p[a + "a"] += (up - p[a + "a"]) * k; p[a + "z"] *= 1 - k; p[a + "f"] += (0.2 - p[a + "f"]) * k; p[a + "b"] += (0.1 - p[a + "b"]) * k; p[a + "h"] += (-0.3 - p[a + "h"]) * k;
+    }
   }
 
   // how quickly each part catches up with where the move wants it: hips fast, hands last
@@ -331,8 +384,8 @@
   const RISE = { footL: 0, footR: 0.05, shinL: 0.14, shinR: 0.19, thighL: 0.3, thighR: 0.35, pelvis: 0.46, spine: 0.56, chest: 0.66, armL: 0.8, armR: 0.84, foreL: 0.92, foreR: 0.96, handL: 1.04, handR: 1.08, neck: 1.12, head: 1.3, jaw: 1.42 };
 
   // which parts of the pose Copy me speaks for (see mirror.js)
-  const TORSO = ["hx", "hrz", "hry", "srx", "sry", "srz", "crx", "cry", "crz"], HEAD = ["nrx", "nry", "nrz"];
-  const LEGS = ["hy", "hz", "hrx", "air", "fLx", "fLy", "fLz", "fLr", "fRx", "fRy", "fRz", "fRr", "kL", "kR"];
+  const TORSO = ["hx", "hz", "hrx", "hrz", "hry", "srx", "sry", "srz", "crx", "cry", "crz"], HEAD = ["nrx", "nry", "nrz"];
+  const LEGS = ["hy", "air", "fLx", "fLy", "fLz", "fLr", "fRx", "fRy", "fRz", "fRr", "kL", "kR"];
 
   SK.createDance = function () {
     const neutral = P(), now = P(), a = P(), b = P(), out = P();
@@ -399,6 +452,8 @@
       live += ((c.going || frozen ? 1 : 0) - live) * Math.min(1, dt * 2.5);
       for (const k of keys) out[k] = k === "spin" ? (live > 0.5 ? a[k] : 0) : b[k] + (a[k] - b[k]) * live;
 
+      // even mid-dance he keeps half an eye on the pointer
+      out.nry += c.lookX * 0.45 * live; out.nrx -= c.lookY * 0.25 * live; out.cry += c.lookX * 0.12 * live;
       // whatever the move, the beat goes through him: a dip in the knees and a nod on every one
       const pulse = hit(c.beat, 2) * vigour * live;
       if (frozen) { out.hrz += 0.012 * Math.sin(c.t * 11); out.aLa += 0.025 * Math.sin(c.t * 13 + 1); out.aRa += 0.025 * Math.sin(c.t * 12); out.nrz += 0.015 * Math.sin(c.t * 9 + 2); }

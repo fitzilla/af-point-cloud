@@ -245,9 +245,8 @@
   // ---------- GPU simulation: velocity pass (w = accumulated damage) ----------
   const VEL_FRAG = `
     uniform sampler2D tPos; uniform sampler2D tVel; uniform sampler2D tHome;
-    uniform float uTime, uDt, uEnergy, uInit, uHover, uSpeed, uRadius, uMotion, uKick, uBass, uLoose;
-    uniform vec3 uRayO, uRayD, uMouseVel;
-    uniform vec4 uPeer[${MAXP}]; uniform vec3 uPeerVel[${MAXP}];   // other visitors: xy, presence, speed
+    uniform float uTime, uDt, uEnergy, uInit, uClick, uRadius, uMotion, uKick, uBass, uLoose;
+    uniform vec3 uRayO, uRayD;
     varying vec2 vUv;
     ${HASH}
     ${NOISE}
@@ -266,12 +265,11 @@
       if (rl > 14.0) ride *= 14.0 / rl;
       float inst = clamp(uEnergy, 0.0, 1.5);
 
-      // proximity: distance from the particle to the pointer ray, in object space
+      // a click: how near the particle is to where it landed (the pointer no longer disturbs him otherwise)
       vec3 op = p - uRayO;
       vec3 dv = op - uRayD * dot(op, uRayD);
       float d = length(dv);
-      float R = uRadius * (1.0 + inst * 0.8 + min(uSpeed, 4.0) * 0.12);
-      float f = smoothstep(R, 0.0, d) * uHover;
+      float f = smoothstep(uRadius * 1.3, 0.0, d) * uClick;
 
       vec3 n = vec3(
         snoise(p * 1.7 + vec3(0.0, 0.0, uTime * 0.3)),
@@ -289,35 +287,9 @@
       // turbulence: idle shimmer up to full abstraction
       acc += n * (0.22 + inst * 2.4 + dmg * 1.4 + air * 0.25) * uMotion * mix(1.0, 0.35, glyph);
 
-      // local field near the pointer: a noise partition decides repel, attract or swirl
-      float mode = f > 0.0 ? snoise(h * 2.2 + vec3(uTime * 0.2)) : 0.0;
-      float repel = smoothstep(-0.25, 0.35, mode);
-      acc += dir * f * mix(-18.0, 40.0, repel);
-      acc += cross(uRayD, dir) * f * 22.0 * (1.0 - abs(mode));
-
-      // velocity: drag particles along with the pointer, tearing the surface
-      acc += uMouseVel * f * (12.0 + min(uSpeed, 5.0) * 12.0);
-
-      // fast strokes detonate the local cloud
+      // a click puffs the dust out from under it; the glyphs barely budge
       vec3 rnd = vec3(hash11(r * 917.3), hash11(r * 331.7 + 1.3), hash11(r * 613.1 + 7.1)) - 0.5;
-      float blast = f * smoothstep(0.8, 3.5, uSpeed);
-      acc += normalize(dir * 0.7 + rnd + vec3(1e-4)) * blast * 170.0 * (0.3 + r);
-
-      // everyone else on the page stirs him with their cursors too
-      float fPeers = 0.0;
-      for (int i = 0; i < ${MAXP}; i++) {
-        vec4 q = uPeer[i];
-        if (q.z <= 0.0) continue;
-        vec2 dq = p.xy - q.xy;
-        float dl = length(dq);
-        float fp = smoothstep(uRadius * (1.0 + min(q.w, 4.0) * 0.12), 0.0, dl) * q.z;
-        if (fp <= 0.0) continue;
-        vec3 pd = dl > 1e-4 ? vec3(dq / dl, 0.0) : dir;
-        acc += pd * fp * mix(-18.0, 40.0, repel);
-        acc += uPeerVel[i] * fp * (12.0 + min(q.w, 5.0) * 12.0);
-        acc += normalize(pd * 0.7 + rnd + vec3(1e-4)) * fp * smoothstep(0.8, 3.5, q.w) * 170.0 * (0.3 + r);
-        fPeers += fp * (0.3 + min(q.w, 5.0) * 1.2);
-      }
+      acc += normalize(dir * 0.7 + rnd + vec3(1e-4)) * f * 70.0 * (0.3 + r) * mix(1.0, 0.15, glyph);
 
       // the beat: every bone puffs a little dust out sideways; the floor's rings jump
       vec3 core = boneAt(bone, vec4(0.0, H.y, 0.0, 1.0), 0.0);
@@ -332,8 +304,7 @@
       float sp = length(v);
       if (sp > 16.0) v *= 16.0 / sp;
 
-      // damage accumulates where the pointer works the surface, heals slowly
-      dmg += (f * (0.3 + min(uSpeed, 5.0) * 1.2) + fPeers) * uDt * 2.0;
+      // damage: dust knocked loose by the beat, healing slowly
       dmg += uKick * uKick * r * (1.0 - glyph) * uDt * 5.0;
       dmg -= uDt * mix(0.9, 0.12, clamp(inst, 0.0, 1.0));
       gl_FragColor = vec4(v, clamp(dmg, 0.0, 1.5));
@@ -526,7 +497,7 @@
   const velMat = fsMat(VEL_FRAG, {
     tPos: { value: null }, tVel: { value: null }, tHome: { value: homeTex }, tBones: { value: boneTex },
     uTime: { value: 0 }, uDt: { value: 0.016 }, uEnergy: { value: 0 },
-    uInit: { value: 1 }, uHover: { value: 0 }, uSpeed: { value: 0 }, uRadius: { value: 0.3 }, uMotion: { value: MOTION },
+    uInit: { value: 1 }, uClick: { value: 0 }, uRadius: { value: 0.3 }, uMotion: { value: MOTION },
     uKick: { value: 0 }, uBass: { value: 0 }, uLoose: { value: 0 },
     uRayO: { value: V3() }, uRayD: { value: new THREE.Vector3(0, 0, -1) }, uMouseVel: { value: V3() },
     uPeer: { value: Array.from({ length: MAXP }, () => new THREE.Vector4()) }, uPeerVel: { value: Array.from({ length: MAXP }, V3) },
@@ -664,7 +635,7 @@
   addEventListener("pointerdown", (e) => {
     if (overUI(e)) return;
     pointer.lt = 0;
-    st.clickBoom = 1;      // a click blows the particles apart under the cursor,
+    st.clickBoom = 1;      // a click puffs the dust out from under the cursor,
     const bone = boneUnder(e);
     const part = bone >= 0 ? dance.poke(rig.bones[bone].name) : "";      // he takes it differently depending on where it lands,
     if (!part) dance.startle();                                           // and just jumps if it missed him
@@ -818,14 +789,13 @@
   }
   connect();
 
-  const danceCtx = { beat: 0, bpm: 118, vibe: "groove", style: "pop", signature: "", energy: 0, going: false, hit: 0, lookX: 0, lookY: 0, t: 0 };
+  const danceCtx = { beat: 0, bpm: 118, vibe: "groove", style: "pop", signature: "", energy: 0, going: false, hit: 0, lookX: 0, lookY: 0, ptrX: 0, ptrY: 0, ptrW: 0, t: 0 };
   let heapMax = 0, verse = 0;
   function update(dt, t) {
     const now = performance.now() / 1000;
     const idleFor = now - st.lastMove;
     // a minute after the last key he drifts back to symbols
     if (typed && now - lastKey > 60) { typed = ""; setText(""); }
-    const active = pointer.inside && idleFor < 0.25;
 
     st.hover += ((pointer.inside ? 1 : 0) - st.hover) * Math.min(1, dt * (pointer.inside ? 6 : 2.5));
     st.speed += (st.speedTarget - st.speed) * Math.min(1, dt * 12);
@@ -833,13 +803,9 @@
     st.velScreen.lerp(st.velScreenTarget, Math.min(1, dt * 10));
     st.velScreenTarget.multiplyScalar(Math.exp(-dt * 7));
 
-    // accumulation: presence alone barely registers, sustained speed builds instability
-    const gain = st.hover * (0.012 + Math.min(st.speed, 5) * 0.09) * (active ? 1 : 0.12);
-    st.energy += gain * dt;
-    if (idleFor > 0.4 || !pointer.inside) st.energy -= dt * (0.35 + st.energy * 0.5);
-    st.energy = Math.min(1.4, Math.max(0, st.energy));
-    // rough him up enough and he comes apart at the joints
-    if (st.energy > 0.75 && Math.random() < dt * (st.energy - 0.65) * 0.5 && dance.collapse()) st.energy *= 0.6;
+    // the pointer doesn't disturb him: he watches it instead (see dance.js). What's left of `energy`
+    // is the little rattle each typed key gives him, which settles straight away.
+    st.energy = Math.max(0, st.energy - dt * (0.35 + st.energy * 0.5));
 
     // the beat, then the pose it asks for, then where that puts every bone
     beat.update(dt, now);
@@ -849,8 +815,11 @@
     const hearing = !!bs.listening && bs.locked;
     danceCtx.hit = hearing ? bs.hit : 0;
     if (bs.drop) { bs.drop = false; dance.drop(); st.pulse = 1; newPalette(); }
-    danceCtx.lookX += ((pointer.inside ? pointer.ndc.x : 0) - danceCtx.lookX) * Math.min(1, dt * 3);
-    danceCtx.lookY += ((pointer.inside ? pointer.ndc.y - 0.55 : 0) - danceCtx.lookY) * Math.min(1, dt * 3);
+    danceCtx.lookX += ((pointer.inside ? pointer.ndc.x : 0) - danceCtx.lookX) * Math.min(1, dt * 5);
+    danceCtx.lookY += ((pointer.inside ? pointer.ndc.y - 0.55 : 0) - danceCtx.lookY) * Math.min(1, dt * 5);
+    // where the pointer is in his own space, and whether it's been moving lately: he reaches for it
+    if (st.lastHit) { danceCtx.ptrX = st.lastHit.x; danceCtx.ptrY = st.lastHit.y; }
+    danceCtx.ptrW += ((pointer.inside && st.lastHit && idleFor < 4 ? 1 : 0) - danceCtx.ptrW) * Math.min(1, dt * 3);
     danceCtx.mirror = mirror.tick(now, dt);
     const moved = dance.step(dt, danceCtx);
     rig.solve(moved.pose);
@@ -913,8 +882,7 @@
     const vu = velMat.uniforms;
     vu.uTime.value = t; vu.uDt.value = dt; vu.uEnergy.value = energy; vu.uLoose.value = st.loose;
     st.clickBoom *= Math.exp(-dt * 6);
-    vu.uHover.value = st.hover; vu.uSpeed.value = Math.max(st.speed, st.clickBoom * 4);
-    vu.uMouseVel.value.copy(st.velWorld);
+    vu.uClick.value = st.clickBoom;
     vu.uKick.value = kick; vu.uBass.value = hearing ? bs.bass * bs.heard : 0;
     posMat.uniforms.uDt.value = dt;
     const pt = ptMat.uniforms;
@@ -922,7 +890,7 @@
     pt.uBeat.value = bs.going ? bs.beat - Math.floor(bs.beat) : 1; pt.uDrive.value = drive; pt.uTreble.value = hearing ? bs.treble : 0; pt.uBar.value = bs.going ? bs.bar : 0;
     const tu = trailMat.uniforms;
     tu.uDecay.value = Math.min(0.95, 0.35 + Math.min(energy, 1) * 0.5 + drive * 0.18);
-    tu.uDrift.value.set(st.velScreen.x * dt * 0.25 * st.hover, st.velScreen.y * dt * 0.25 * st.hover + 0.0008 * energy);
+    tu.uDrift.value.set(0, 0.0008 * energy);
     const fu = finalMat.uniforms;
     fu.uTime.value = t % 600; fu.uEnergy.value = energy;
     st.pulse *= Math.exp(-dt * 3.2);

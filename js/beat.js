@@ -82,6 +82,7 @@
   // No sound to go on, so the title is all there is. Wrong often enough that Tap and Listen exist.
   // The kind of music: which dances suit it, how hard he goes, and a tempo to start from.
   const KINDS = [
+    ["metal", "hype", 138, /metal\b|metallica|slayer|megadeth|pantera|iron maiden|black sabbath|slipknot|rammstein|system of a down|mot[oö]rhead|judas priest|anthrax|sepultura|thrash|djent|doom|lamb of god|gojira|mastodon|\bkorn\b|rage against|master of puppets|enter sandman|ace of spades|mosh|headbang/i],
     ["spooky", "groove", 120, /spooky|skeleton|halloween|ghost|monster mash|thriller|zombie|haunted|addams|graveyard/i],
     ["chill", "chill", 84, /lo-?fi|chill|relax|study|sleep|ambient|piano|acoustic|jazz|calm|rain|slow|ballad|bossa|meditat|soft|unplugged|lullaby/i],
     ["rave", "hype", 140, /techno|hardstyle|hardcore|drum ?(and|&|n) ?bass|\bdnb\b|dubstep|phonk|rave|trance|gabber|nightcore|workout|jungle|\bedm\b|festival|sandstorm|house|eurodance/i],
@@ -95,7 +96,8 @@
     [/y\.?m\.?c\.?a/i, "ymca"], [/thriller/i, "zombie"], [/gangnam/i, "gangnam"], [/macarena/i, "macarena"], [/never gonna give you up|rick astley/i, "rickSway"],
     [/stayin.? alive|saturday night fever|bee gees/i, "stayinAlive"], [/egyptian/i, "egyptian"], [/\btwist\b/i, "twist"], [/robot|daft punk|kraftwerk/i, "robot"],
     [/spooky scary/i, "rattle"], [/sandstorm/i, "fistPump"], [/floss/i, "floss"], [/billie jean|smooth criminal|moonwalk/i, "moonwalk"], [/charleston/i, "charleston"],
-    [/can.?can/i, "kicks"], [/griddy/i, "griddy"], [/mr\.? ?bean/i, "bean"], [/friends|the routine|ross and monica/i, "routine"], [/hip thrust|pelvic thrust|time warp/i, "hipThrust"], [/\bjump\b/i, "pogo"], [/bohemian|headbang/i, "headbang"], [/monster mash/i, "zombie"],
+    [/can.?can/i, "kicks"], [/griddy/i, "griddy"], [/mr\.? ?bean/i, "bean"], [/friends|the routine|ross and monica/i, "routine"], [/hip thrust|pelvic thrust|time warp/i, "hipThrust"], [/\bjump\b/i, "pogo"], [/bohemian|headbang/i, "headbang"], [/ac\/?dc|thunderstruck|back in black|highway to hell|johnny b\.? goode|chuck berry/i, "duckWalk"],
+    [/metallica|slayer|megadeth|pantera|slipknot|master of puppets|enter sandman/i, "hairWhip"], [/iron maiden|judas priest|\bdio\b|mot[oö]rhead|ace of spades|black sabbath/i, "horns"], [/guitar solo|van halen|eruption|free bird|hendrix/i, "kneeSlide"], [/monster mash/i, "zombie"],
   ];
   function guess(title) {
     const kind = KINDS.find((k) => k[3].test(title)), own = SIGNATURE.find((x) => x[0].test(title));

@@ -30,7 +30,7 @@
       armL: down(), foreL: down(), handL: down(), armR: down(), foreR: down(), handR: down(),
       pose: { hx: 0, hy: 0, hz: 0, hrx: 0, hry: 0, hrz: 0, srx: 0, sry: 0, srz: 0, crx: 0, cry: 0, crz: 0, nrx: 0, nry: 0, nrz: 0,
         fLx: 0, fLy: 0, fLz: 0, fLr: 0, fRx: 0, fRy: 0, fRz: 0, fRr: 0, kL: 0.25, kR: 0.25, air: 0 },
-      floor: 0, legImg: 0,
+      floor: 0, legImg: 0, back: 0, hipsLately: 0,
     };
   }
 
@@ -64,11 +64,22 @@
     const roll = Math.atan2(shAx[1], shAx[0]), yaw = Math.atan2(-shAx[2], shAx[0]);
     // with the hips out of shot (sat at a desk) the tilt of the shoulders is all there is to go on
     const lean = roll + (Math.atan2(-spine[0], spine[1]) - roll) * hips;
-    const bend = clamp(Math.atan2(spine[2], spine[1]), -0.3, 0.9) * hips;
-    want.hrz = clamp(hrz, -0.6, 0.6); want.hry = clamp(hry, -0.9, 0.9); want.hrx = 0; want.hz = 0;
+    // Bending over. Toward and away from the camera is the tracker's weakest guess, so this goes by
+    // something it sees well: how much less tall the back has got than it is long. What's left of that
+    // after the sideways lean is the bend; only a clear lean away from the camera counts as backward.
+    const back = len(sub(mid(at(SH_R, 1), at(SH_L, 1)), mid(at(HIP_R, 1), at(HIP_L, 1))));
+    g.back = Math.max(back, g.back * Math.exp(-dt / 40));
+    const tilt = Math.acos(clamp(spine[1] / Math.max(0.1, g.back), -1, 1)), side = Math.atan2(-spine[0], Math.abs(spine[1]));
+    const fold = Math.max(0, Math.sqrt(Math.max(0, tilt * tilt - side * side)) - 0.12) * 1.1;
+    // (bent double, their own body can hide their hips: go on trusting hips that were in view a moment ago)
+    g.hipsLately = Math.max(hips, g.hipsLately * Math.exp(-dt / 2));
+    const bend = clamp(spine[2] < -0.25 * g.back ? -fold : fold, -0.4, 1.5) * g.hipsLately;
+    want.hrz = clamp(hrz, -0.6, 0.6); want.hry = clamp(hry, -0.9, 0.9);
+    // a bow hinges at the hips, which go back a little as the head comes forward
+    want.hrx = bend * 0.3; want.hz = -0.16 * Math.sin(Math.max(0, bend));
     want.srz = clamp(lean - hrz, -0.6, 0.6); want.crz = clamp(roll - lean, -0.5, 0.5);
     want.sry = 0; want.cry = clamp((yaw - hry) * 0.8, -0.9, 0.9);
-    want.srx = want.crx = bend * 0.5;
+    want.srx = want.crx = bend * 0.35;
     g.wTorso += (clear(SH_L, SH_R) - g.wTorso) * slow;
 
     // head: the ears give the tilt, and where the nose sits between them gives the turn and the nod
@@ -144,7 +155,7 @@
       const track = stream.getVideoTracks()[0];
       if (track) track.addEventListener("ended", stop);      // unplugged, or permission taken away
       try { await video.play(); } catch (e) { /* it plays once it can */ }
-      g.on = true; g.floor = 0; g.legImg = 0; fails = 0; lastSeen = -9;
+      g.on = true; g.floor = 0; g.legImg = 0; g.back = 0; g.hipsLately = 0; fails = 0; lastSeen = -9;
       status = tracker ? "looking" : "loading";
     }
     // fetches the tracker (once); the camera can already be showing

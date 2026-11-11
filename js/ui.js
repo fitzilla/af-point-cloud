@@ -19,6 +19,8 @@
     { id: "Gs069dndIYk", name: "September", style: "disco", by: "Earth, Wind & Fire", bpm: 126, vibe: "groove" },
     { id: "dQw4w9WgXcQ", name: "Never Gonna Give You Up", style: "pop", by: "Rick Astley", bpm: 113, vibe: "groove" },
     { id: "OPf0YbXqDm0", name: "Uptown Funk", style: "disco", by: "Mark Ronson", bpm: 115, vibe: "groove" },
+    { id: "v2AC41dglnM", name: "Thunderstruck", style: "rock", by: "AC/DC", bpm: 134, vibe: "hype" },
+    { id: "CD-E-LDc384", name: "Enter Sandman", style: "metal", by: "Metallica", bpm: 123, vibe: "hype" },
     { id: "y6120QOlsfU", name: "Sandstorm", style: "rave", by: "Darude", bpm: 136, vibe: "hype" },
     { id: "tRsQsTMvPNg", name: "Claude FM", style: "chill", by: "lofi, live", bpm: 80, vibe: "chill" },
   ];
