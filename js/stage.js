@@ -613,7 +613,7 @@
     velScreen: new THREE.Vector2(), velScreenTarget: new THREE.Vector2(),
     velWorld: new THREE.Vector3(), lastHit: null, parX: 0, parY: 0,
   };
-  const overUI = (e) => e.target instanceof Element && !!e.target.closest(".controls, .card, #tube");
+  const overUI = (e) => e.target instanceof Element && !!e.target.closest(".dock, .card, #tube, #cam");
 
   function onMove(e) {
     const now = performance.now() / 1000;

@@ -154,7 +154,8 @@
       video.muted = true; video.playsInline = true; video.srcObject = stream;
       const track = stream.getVideoTracks()[0];
       if (track) track.addEventListener("ended", stop);      // unplugged, or permission taken away
-      try { await video.play(); } catch (e) { /* it plays once it can */ }
+      const playing = video.play();            // not awaited: the switch flips as soon as the camera is allowed
+      if (playing && playing.catch) playing.catch(() => {});
       g.on = true; g.floor = 0; g.legImg = 0; g.back = 0; g.hipsLately = 0; fails = 0; lastSeen = -9;
       status = tracker ? "looking" : "loading";
     }

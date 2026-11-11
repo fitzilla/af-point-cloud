@@ -24,19 +24,77 @@
     { id: "y6120QOlsfU", name: "Sandstorm", style: "rave", by: "Darude", bpm: 136, vibe: "hype" },
   ];
 
-  // ---------- cards: one open at a time; click away or Esc closes ----------
+  // ---------- cards: one open at a time, above the dock ----------
+  // Clicking away or Esc closes it; on a touch screen so does swiping it down, like a sheet (the little
+  // bar at its top says so). Same as pomo.fm.
   const cards = [...document.querySelectorAll(".card")];
+  const triggers = [...document.querySelectorAll("[data-card]")];
   let openCard = null;
   function show(card) {
+    if (openCard === card) return;
     openCard = card;
-    for (const c of cards) c.hidden = c !== card;
-    for (const b of document.querySelectorAll("[data-card]")) b.setAttribute("aria-expanded", String(!!card && b.dataset.card === card.id));
+    for (const c of cards) {
+      c.classList.toggle("open", c === card);
+      c.inert = c !== card;
+      if (c === card) c.style.transition = c.style.transform = c.style.opacity = "";     // whatever a swipe left behind
+    }
+    for (const t of triggers) t.setAttribute("aria-expanded", String(!!card && t.dataset.card === card.id));
+    document.body.classList.toggle("card-open", !!card);
+    if (card) card.focus({ preventScroll: true });
   }
-  for (const b of document.querySelectorAll("[data-card]")) {
-    b.addEventListener("click", () => { const card = $(b.dataset.card); show(openCard === card ? null : card); b.blur(); });
-  }
-  addEventListener("pointerdown", (e) => { if (openCard && !e.target.closest(".card, [data-card]")) show(null); });
+  for (const t of triggers) t.addEventListener("click", () => { const card = $(t.dataset.card); show(openCard === card ? null : card); });
+  addEventListener("pointerdown", (e) => { if (openCard && !openCard.contains(e.target) && !e.target.closest(".dock")) show(null); });
   addEventListener("keydown", (e) => { if (e.key === "Escape" && openCard) show(null); });
+  for (const card of cards) {
+    const grab = document.createElement("i");
+    grab.className = "grab";
+    grab.setAttribute("aria-hidden", "true");
+    card.prepend(grab);
+    swipeAway(card);
+    card.inert = true;
+  }
+  // A drag counts when it starts with the card scrolled to its top and heads mostly downward; a tap or a
+  // sideways drag is left alone.
+  function swipeAway(card) {
+    let x0 = 0, y0 = 0, t0 = 0, dy = 0, state = "idle";
+    const clear = () => { card.style.transition = card.style.transform = card.style.opacity = ""; };
+    card.addEventListener("touchstart", (e) => {
+      const touch = e.touches[0];
+      state = e.touches.length === 1 && openCard === card && card.scrollTop <= 0 ? "maybe" : "no";
+      x0 = touch.clientX; y0 = touch.clientY; t0 = performance.now(); dy = 0;
+    }, { passive: true });
+    card.addEventListener("touchmove", (e) => {
+      if (state !== "maybe" && state !== "drag") return;
+      const touch = e.touches[0], mx = touch.clientX - x0, my = touch.clientY - y0;
+      if (state === "maybe") {
+        if (my > 0 && my >= Math.abs(mx)) e.preventDefault();
+        if (Math.hypot(mx, my) < 8) return;
+        if (my <= 0 || Math.abs(mx) > my) { state = "no"; return; }
+        state = "drag";
+        card.style.transition = "none";
+      }
+      e.preventDefault();
+      dy = Math.max(0, my);
+      card.style.transform = `translateY(${dy}px)`;
+      card.style.opacity = String(Math.max(0.3, 1 - dy / 360));
+    }, { passive: false });
+    function end() {
+      if (state !== "drag") { state = "idle"; return; }
+      state = "idle";
+      const fast = dy / Math.max(1, performance.now() - t0) > 0.5;
+      card.style.transition = "transform 0.2s ease, opacity 0.2s ease";
+      if (dy > 90 || (dy > 30 && fast)) {
+        card.style.transform = `translateY(${card.offsetHeight + 40}px)`;
+        card.style.opacity = "0";
+        setTimeout(() => { if (openCard === card) show(null); setTimeout(clear, 250); }, 200);
+      } else {
+        card.style.transform = card.style.opacity = "";
+        setTimeout(() => { if (state === "idle") card.style.transition = ""; }, 220);
+      }
+    }
+    card.addEventListener("touchend", end);
+    card.addEventListener("touchcancel", end);
+  }
 
   // ---------- the first-visit nudge: comes and goes at the top until they do something ----------
   const hint = $("hint"), hintText = $("hint-text");
@@ -47,7 +105,11 @@
     hint.classList.toggle("on", on);
     hintTimer = setTimeout(() => hintCycle(!on), on ? 2600 + Math.random() * 2200 : 3000 + Math.random() * 6000);
   }
-  function acted() { clearTimeout(hintTimer); hint.classList.remove("on"); }
+  // the first thing they do: the nudge stops, and the title fades away
+  const titleEl = $("title");
+  function acted() { clearTimeout(hintTimer); hint.classList.remove("on"); if (titleEl) titleEl.classList.add("gone"); }
+  addEventListener("pointerdown", (e) => { if (!(e.target instanceof Element) || !e.target.closest("#tube")) acted(); }, { passive: true });
+  addEventListener("keydown", (e) => { if (!e.ctrlKey && !e.metaKey && !e.altKey) acted(); });
   try {
     const fresh = !localStorage.getItem("af-bones-seen");
     localStorage.setItem("af-bones-seen", "1");
@@ -165,34 +227,34 @@
   const linked = videoId(params.get("v"));
   if (linked) play(SONGS.find((s) => s.id === linked) || { id: linked }, false, "shared_link");
 
-  // ---------- tap, listen ----------
-  const tapBtn = $("tap"), listenBtn = $("listen"), listenNote = $("listen-note");
-  // He can't hear YouTube's player, so under it sits the offer to let him listen: one press, then the
-  // browser's own permission question. "Not now" folds it down to a single quiet line for the visit.
-  const askEl = $("tube-ask"), askNote = $("ask-note"), quietEl = $("tube-listen"), heardEl = $("tube-heard");
-  const tabBtn = $("listen-tab"), askTab = $("ask-tab");
-  // sharing a tab's sound is a desktop Chrome and Edge thing
+  // ---------- tap, and the two switches: Listen and Copy me ----------
+  // A switch says, while it's off, what turning it on will use; while it's on, what it's doing.
+  const tapBtn = $("tap"), dockEl = $("dock"), put = (el, text) => { if (el.textContent !== text) el.textContent = text; };
+  const listenBtn = $("listen"), listenSay = $("listen-say"), listenNote = $("listen-note");
+  // sharing a tab's sound is a desktop Chrome and Edge thing; elsewhere the switch goes straight to the mic
   const canTab = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) && !matchMedia("(pointer: coarse)").matches;
-  const ASK_NOTE = canTab ? "Headphones on? Use tab sound. Nothing is recorded." : "Turn the music up. Nothing is recorded.";
-  let later = false;
-  tabBtn.hidden = askTab.hidden = !canTab;
-  if (!navigator.mediaDevices) listenBtn.hidden = true;
-  askNote.textContent = ASK_NOTE;
-  const put = (el, text) => { if (el.textContent !== text) el.textContent = text; };
+  if (!canTab) $("listen-tab").hidden = true;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) listenBtn.hidden = true;
+  let listenMsg = "", listenUntil = 0, asking = false;
+  function sayListen(text, secs) { listenMsg = text; listenUntil = performance.now() + secs * 1000; paint(); }
   function paint() {
-    put(tapBtn.lastElementChild, `Tap · ${Math.round(bs.bpm)}`);
-    listenBtn.setAttribute("aria-pressed", String(!!bs.listening));
-    put(listenBtn.lastElementChild, bs.listening ? (bs.locked ? "Listening" : "Listening…") : "Listen");
-    $("listen-off").hidden = !bs.listening;
-    const can = !listenBtn.hidden, deaf = !bs.listening;
-    askEl.hidden = !(can && deaf && !later);
-    quietEl.hidden = !(can && deaf && later);
-    heardEl.hidden = deaf;
-    put(heardEl, bs.locked ? "He can hear it. He’s on the real beat." : "Listening for the beat…");
-    // where the player reaches the middle of a narrow screen, tell the stage how much of the picture
-    // it covers, so he dances above it
-    const box = tube.hidden ? null : tube.getBoundingClientRect();
-    SK.cover = box && box.right > innerWidth * 0.5 ? Math.min(0.6, Math.max(0, 1 - box.top / innerHeight)) : 0;
+    put(tapBtn.querySelector("b"), String(Math.round(bs.bpm)));
+    const on = !!bs.listening;
+    listenBtn.setAttribute("aria-checked", String(on));
+    listenBtn.setAttribute("aria-busy", String(asking || (on && !bs.locked)));
+    const msg = performance.now() < listenUntil ? listenMsg : "";
+    put(listenSay, msg || (on ? (bs.locked ? "On · he’s on the real beat" : "On · listening for the beat…") : bs.playing ? "Off · he’s guessing the beat. Turn on so he hears it" : "Off · turn on so he hears the music"));
+    listenBtn.classList.toggle("nudge", !on && !asking && bs.playing && !tube.hidden);
+    // how tall the dock is (the cards and the player sit above it), and how much of the bottom of the
+    // picture is covered in the middle, where he is: he moves up to dance in what's left
+    document.documentElement.style.setProperty("--dock-h", dockEl.offsetHeight + "px");
+    let top = innerHeight;
+    for (const el of [tube, dockEl]) {
+      if (el.hidden) continue;
+      const r = el.getBoundingClientRect();
+      if (r.left < innerWidth / 2 && r.right > innerWidth / 2) top = Math.min(top, r.top);
+    }
+    SK.cover = Math.min(0.6, Math.max(0, 1 - top / innerHeight - 0.03));
   }
   function tap() {
     beat.tap(performance.now() / 1000);
@@ -204,66 +266,73 @@
     paint();
   }
   tapBtn.addEventListener("click", () => { tap(); tapBtn.blur(); });
-  const tell = (text) => { listenNote.textContent = text; askNote.textContent = text || ASK_NOTE; };
-  // via: where it was asked from (prompt = under the player, card = the Listen control)
+  // via: where it was switched on from (card = the choice of mic or tab, switch = straight from the switch)
   async function listen(kind, via) {
-    tell(kind === "tab" ? "Choose this tab, and tick “also share tab audio”." : "Allow the microphone, and turn the music up.");
+    asking = true;
+    show(null);
+    sayListen(kind === "tab" ? "Pick this tab and tick “also share tab audio”" : "Allow the microphone, and turn the music up", 60);
     try {
       await beat.listen(kind);
-      tell("He’s listening. Nothing is recorded or sent anywhere.");
+      listenUntil = 0;
       SK.track("listen_started", { kind, via });
-      show(null);
+      listenNote.textContent = "";
     } catch (e) {
-      tell(e && e.name === "NotAllowedError" ? "No permission, so he can’t hear. He’ll keep guessing." : (e && e.message) || "That didn’t work.");
+      const why = e && e.name === "NotAllowedError" ? "No permission, so he’s still guessing" : (e && e.message) || "That didn’t work";
+      sayListen(why, 6);
+      listenNote.textContent = why;
     }
+    asking = false;
     paint();
   }
+  listenBtn.addEventListener("click", () => {
+    if (bs.listening) { beat.stop(); sayListen("Off · back to guessing the beat", 3); return; }
+    if (asking) return;
+    if (canTab) show(openCard === $("card-listen") ? null : $("card-listen"));
+    else listen("mic", "switch");
+  });
   $("listen-mic").addEventListener("click", () => listen("mic", "card"));
-  tabBtn.addEventListener("click", () => listen("tab", "card"));
-  $("ask-mic").addEventListener("click", () => listen("mic", "prompt"));
-  askTab.addEventListener("click", () => listen("tab", "prompt"));
-  $("ask-later").addEventListener("click", () => { later = true; SK.track("listen_prompt_dismissed", {}); paint(); });
-  quietEl.addEventListener("click", () => { later = false; tell(""); paint(); });
-  $("listen-off").addEventListener("click", () => { beat.stop(); tell(""); paint(); show(null); });
+  $("listen-tab").addEventListener("click", () => listen("tab", "card"));
+  addEventListener("resize", paint);
   setInterval(paint, 500);
   paint();
 
   // ---------- copy me: the webcam, and he does what you do ----------
-  const mirror = SK.mirror, copyBtn = $("copy"), copyNote = $("copy-note"), camEl = $("cam"), camNote = $("cam-note");
-  const COPY_NOTE = copyNote.textContent;
-  const CAM_SAYS = { asking: "", loading: "Loading his eyes…", looking: "Step back so he can see you", copying: "He’s copying you", failed: "", off: "" };
-  let copied = false;
+  const mirror = SK.mirror, copyBtn = $("copy"), copySay = $("copy-say"), camEl = $("cam"), camNote = $("cam-note");
+  const COPY_SAYS = { asking: "Allow the camera…", loading: "On · loading his eyes…", looking: "On · step back so he can see you", copying: "On · camera live, he’s copying you" };
+  const CAM_SAYS = { loading: "Loading his eyes", looking: "Step back", copying: "Copying you" };
+  let copyMsg = "", copyUntil = 0, copied = false;
   if (!mirror || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) copyBtn.hidden = true;
   function paintCopy() {
-    const on = !!(mirror && mirror.guide.on);
-    copyBtn.setAttribute("aria-pressed", String(on));
-    put(copyBtn.lastElementChild, on ? "Copying" : "Copy me");
+    const on = !!(mirror && mirror.guide.on), status = mirror ? mirror.status : "off";
+    copyBtn.setAttribute("aria-checked", String(on));
+    copyBtn.setAttribute("aria-busy", String(status === "asking" || status === "loading"));
     camEl.hidden = !on;
-    $("copy-on").hidden = on;
-    $("copy-off").hidden = !on;
-    put(camNote, CAM_SAYS[mirror ? mirror.status : "off"] || "");
+    const msg = performance.now() < copyUntil ? copyMsg : "";
+    put(copySay, msg || COPY_SAYS[status] || "Off · turn on so he copies you. Uses your camera");
+    put(camNote, CAM_SAYS[status] || "");
     // once per visit: it found someone, so it works for them
-    if (on && mirror.status === "copying" && !copied) { copied = true; SK.track("copy_me_seen", {}); }
+    if (on && status === "copying" && !copied) { copied = true; SK.track("copy_me_seen", {}); }
   }
   async function copy() {
-    copyNote.textContent = "Allow the camera, then stand back so he can see you.";
     try {
-      await mirror.camera($("cam-view"));
+      const asked = mirror.camera($("cam-view"));
+      paintCopy();
+      await asked;
       SK.track("copy_me_started", {});
-      acted();
-      show(null);
-      copyNote.textContent = COPY_NOTE;
       paintCopy();
       await mirror.load();
     } catch (e) {
       const name = e && e.name;
-      copyNote.textContent = name === "NotAllowedError" ? "No permission, so he can’t see you." : name === "NotFoundError" || name === "OverconstrainedError" ? "He can’t find a camera." : name === "NotReadableError" ? "Something else is using the camera." : (e && e.message) || "That didn’t work.";
-      if (name !== "NotAllowedError" && openCard !== $("card-copy")) show($("card-copy"));
+      copyMsg = name === "NotAllowedError" ? "No permission, so he can’t see you" : name === "NotFoundError" || name === "OverconstrainedError" ? "He can’t find a camera" : name === "NotReadableError" ? "Something else is using the camera" : (e && e.message) || "That didn’t work";
+      copyUntil = performance.now() + 6000;
     }
     paintCopy();
   }
-  $("copy-on").addEventListener("click", copy);
-  $("copy-off").addEventListener("click", () => { mirror.stop(); copyNote.textContent = COPY_NOTE; paintCopy(); show(null); });
+  copyBtn.addEventListener("click", () => {
+    if (mirror.status === "asking") return;
+    if (mirror.guide.on) { mirror.stop(); copyMsg = "Off · camera’s off"; copyUntil = performance.now() + 2500; paintCopy(); return; }
+    copy();
+  });
   setInterval(paintCopy, 500);
   paintCopy();
 
