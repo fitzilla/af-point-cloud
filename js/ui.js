@@ -96,8 +96,10 @@
   }
 
   // autoplay: true when a click or paste asked for it; a link opened cold just cues up, ready to press
-  async function play(song, autoplay) {
+  // via: how it was chosen (preset, link, paste, shared_link)
+  async function play(song, autoplay, via) {
     current = Object.assign({}, song);
+    SK.track("song_picked", { video_id: song.id, preset: !!song.name, name: song.name || "", via });
     wanted = current.id;
     acted();
     show(null);
@@ -145,7 +147,7 @@
     b.innerHTML = "<b></b><span></span>";
     b.firstChild.textContent = song.name;
     b.lastChild.textContent = song.by;
-    b.addEventListener("click", () => play(song, true));
+    b.addEventListener("click", () => play(song, true, "preset"));
     list.append(b);
   }
   function go() {
@@ -153,17 +155,17 @@
     if (!id) { say("That doesn’t look like a YouTube link."); return; }
     linkEl.value = "";
     say("");
-    play(SONGS.find((s) => s.id === id) || { id }, true);
+    play(SONGS.find((s) => s.id === id) || { id }, true, "link");
   }
   $("link-form").addEventListener("submit", (e) => { e.preventDefault(); go(); });
   // paste a YouTube link anywhere on the page and he starts
   addEventListener("paste", (e) => {
     if (e.target instanceof Element && e.target.closest("input, textarea")) return;
     const id = videoId(e.clipboardData && e.clipboardData.getData("text"));
-    if (id) { e.preventDefault(); play(SONGS.find((s) => s.id === id) || { id }, true); }
+    if (id) { e.preventDefault(); play(SONGS.find((s) => s.id === id) || { id }, true, "paste"); }
   });
   const linked = videoId(params.get("v"));
-  if (linked) play(SONGS.find((s) => s.id === linked) || { id: linked }, false);
+  if (linked) play(SONGS.find((s) => s.id === linked) || { id: linked }, false, "shared_link");
 
   // ---------- tap, listen ----------
   const tapBtn = $("tap"), listenBtn = $("listen"), listenNote = $("listen-note");
@@ -189,6 +191,7 @@
     try {
       await beat.listen(kind);
       listenNote.textContent = "He’s listening. Nothing is recorded or sent anywhere.";
+      SK.track("listen_started", { kind });
       show(null);
     } catch (e) {
       listenNote.textContent = e && e.name === "NotAllowedError" ? "No permission, so he can’t hear. He’ll keep time by tempo." : (e && e.message) || "That didn’t work.";

@@ -54,6 +54,13 @@
   if (!simType) { fail("This piece needs a GPU that can render floating-point textures."); return; }
 
   const params = new URLSearchParams(location.search);
+  // What people do with him, sent to PostHog (cookieless, no profiles; see site-head.html). Only from the
+  // real site, so previews and tests don't count; ?debug keeps a list in SK.tracked to check against.
+  SK.tracked = [];
+  const track = (SK.track = (name, props) => {
+    if (params.has("debug")) SK.tracked.push([name, props]);
+    try { if (location.hostname === "aaronfitzsimmons.com" && window.posthog && window.posthog.capture) window.posthog.capture(name, props); } catch (e) { /* analytics never gets in his way */ }
+  });
   const coarse = matchMedia("(pointer: coarse)").matches || Math.min(innerWidth, innerHeight) < 560;
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const MOTION = reduced ? 0.35 : 1.0;
@@ -649,8 +656,13 @@
     pointer.lt = 0;
     st.clickBoom = 1;      // a click blows the particles apart under the cursor,
     const bone = boneUnder(e);
-    if (bone >= 0 && dance.poke(rig.bones[bone].name)) { if (SK.ui) SK.ui.acted(); }     // he takes it differently depending on where it lands,
-    else dance.startle();                                                               // and just jumps if it missed him
+    const part = bone >= 0 ? dance.poke(rig.bones[bone].name) : "";      // he takes it differently depending on where it lands,
+    if (!part) dance.startle();                                           // and just jumps if it missed him
+    else {
+      if (SK.ui) SK.ui.acted();
+      const now = performance.now();
+      if (now - lastPoke > 1000) { lastPoke = now; track("bone_poked", { part }); }      // a frenzy of clicks counts once a second
+    }
     onMove(e);
   }, { passive: true });
   addEventListener("pointerup", (e) => { if (e.pointerType !== "mouse") onLeave(); });
@@ -685,7 +697,7 @@
   // ---------- typing: whatever you type is what he's made of ----------
   // Backspace edits; Esc (or nothing left) turns him back into symbols.
   const TYPEABLE = /^[\p{L}\p{N}!?&@#$%*+=.,:;'"()\/ -]$/u;
-  let typed = "", wordTimer = 0, lastKey = 0;
+  let typed = "", wordTimer = 0, wordSent = 0, lastKey = 0, lastPoke = 0;
   addEventListener("keydown", (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
     if (e.target instanceof Element && e.target.closest("input, textarea, select")) return;
@@ -710,7 +722,13 @@
     dance.talk();
     clearTimeout(wordTimer);
     wordTimer = setTimeout(() => setText(typed.trim()), 60);
-    if (!remote) { SK.ui && SK.ui.acted(); send({ t: "w", w: typed }); }
+    if (!remote) {
+      SK.ui && SK.ui.acted();
+      send({ t: "w", w: typed });
+      // once they've stopped typing, not on every key
+      clearTimeout(wordSent);
+      wordSent = setTimeout(() => { const word = typed.trim(); if (word) track("word_typed", { word, length: [...word].length }); }, 1500);
+    }
   }
 
   // reset: symbols again, a fresh palette, and he falls in a heap and puts himself back together
