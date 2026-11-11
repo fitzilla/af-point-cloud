@@ -279,6 +279,35 @@
     leg("R", -1, p, px);
   }
 
+  // ---------- copying someone ----------
+  // Copy me (mirror.js) says which way each arm bone should point. The pose has already put him
+  // somewhere; this turns each arm from there toward where it's told, as far as `w` trusts it.
+  const fq = new THREE.Quaternion(), fw = new THREE.Quaternion(), fx = new THREE.Vector3(), end = new THREE.Vector3();
+  function point(bone, want, w) {
+    ty.fromArray(want).normalize();
+    // its front faces us where it can; a bone pointing straight at us keeps the side it already had
+    tx.crossVectors(ty, Z);
+    const flat = tx.lengthSq();
+    if (flat < 0.04) { fx.setFromMatrixColumn(bone.world, 0); tx.lerp(fx.addScaledVector(ty, -fx.dot(ty)), 1 - flat / 0.04); }
+    if (tx.lengthSq() < 1e-6) tx.set(1, 0, 0);
+    tx.normalize();
+    tz.crossVectors(tx, ty);
+    fw.setFromRotationMatrix(m1.makeBasis(tx, ty, tz));
+    fq.setFromRotationMatrix(bone.world).slerp(fw, w);
+    bone.world.makeRotationFromQuaternion(fq).setPosition(end);
+    end.addScaledVector(ty.setFromMatrixColumn(bone.world, 1), bone.len);      // the next bone starts where this one stops
+  }
+  function follow(g) {
+    for (const L of ["L", "R"]) {
+      const w = g["wArm" + L] * g.seen;
+      if (w < 0.004) continue;
+      end.setFromMatrixPosition(bones[B["arm" + L]].world);
+      point(bones[B["arm" + L]], g["arm" + L], w);
+      point(bones[B["fore" + L]], g["fore" + L], w);
+      point(bones[B["hand" + L]], g["hand" + L], w);
+    }
+  }
+
   // ---------- falling apart ----------
   // Every bone has a place in a heap on the floor. `heap` (0 to 1 for each bone) slides it there and back.
   const pile = bones.map((b, i) => {
@@ -320,5 +349,5 @@
     }
   }
 
-  SK.rig = { B, NB, W, FLOOR, J, bones, shapes, build, pose: P, solve, heap, write };
+  SK.rig = { B, NB, W, FLOOR, J, bones, shapes, build, pose: P, solve, follow, heap, write };
 })();

@@ -330,6 +330,10 @@
   // the order he's put back together in: feet first, skull last
   const RISE = { footL: 0, footR: 0.05, shinL: 0.14, shinR: 0.19, thighL: 0.3, thighR: 0.35, pelvis: 0.46, spine: 0.56, chest: 0.66, armL: 0.8, armR: 0.84, foreL: 0.92, foreR: 0.96, handL: 1.04, handR: 1.08, neck: 1.12, head: 1.3, jaw: 1.42 };
 
+  // which parts of the pose Copy me speaks for (see mirror.js)
+  const TORSO = ["hx", "hrz", "hry", "srx", "sry", "srz", "crx", "cry", "crz"], HEAD = ["nrx", "nry", "nrz"];
+  const LEGS = ["hy", "hz", "hrx", "air", "fLx", "fLy", "fLz", "fLr", "fRx", "fRy", "fRz", "fRr", "kL", "kR"];
+
   SK.createDance = function () {
     const neutral = P(), now = P(), a = P(), b = P(), out = P();
     const keys = Object.keys(neutral);
@@ -409,6 +413,23 @@
         out.air += 0.38 * u; out.aLa += (2.8 - out.aLa) * u; out.aRa += (2.8 - out.aRa) * u; out.jaw = Math.max(out.jaw, u);
       }
 
+      // Copy me: where the camera can see their body, his goes where theirs is. (The arms are pointed
+      // straight at theirs afterwards, in rig.follow; this is the rest of him.) Legs it can't see carry
+      // on dancing by themselves.
+      const g = c.mirror;
+      if (g && g.seen > 0.01) {
+        const gp = g.pose;
+        for (const k of TORSO) out[k] += (gp[k] - out[k]) * g.wTorso * g.seen;
+        for (const k of HEAD) out[k] += (gp[k] - out[k]) * g.wHead * g.seen;
+        for (const k of LEGS) out[k] += (gp[k] - out[k]) * g.wLegs * g.seen;
+      }
+      // the camera's on and there's nobody there: hand to his brow, looking for them
+      if (g && g.on) {
+        const k = (1 - g.seen) * (1 - live);
+        out.aRa += (0.75 - out.aRa) * k; out.aRf += (1.0 - out.aRf) * k; out.aRb += (2.3 - out.aRb) * k; out.aRz *= 1 - k; out.aRh += (-0.5 - out.aRh) * k;
+        out.nry += (0.7 * Math.sin(c.t * 0.9) - out.nry) * k; out.cry += (0.25 * Math.sin(c.t * 0.9) - out.cry) * k; out.crx += 0.14 * k; out.nrx += 0.1 * k;
+      }
+
       // Poked: every part of him takes it differently.
       if (poked) {
         const u = (poked.t += dt), L = poked.side > 0 ? "L" : "R";
@@ -452,7 +473,7 @@
       out.jaw = Math.max(out.jaw, startled, talking * 0.8, tada);
       out.aLa += (1.5 - out.aLa) * tada; out.aRa += (1.5 - out.aRa) * tada; out.aLz += (0.3 - out.aLz) * tada; out.aRz += (0.3 - out.aRz) * tada;
 
-      const quick = a.snap ? 3 : 1;
+      const quick = a.snap || (g && g.seen > 0.5) ? 3 : 1;      // copying someone, he keeps up
       for (const k of keys) now[k] += (out[k] - now[k]) * Math.min(1, dt * RATE(k) * quick);
 
       // the heap

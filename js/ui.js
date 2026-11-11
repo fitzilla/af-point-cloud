@@ -227,6 +227,45 @@
   setInterval(paint, 500);
   paint();
 
+  // ---------- copy me: the webcam, and he does what you do ----------
+  const mirror = SK.mirror, copyBtn = $("copy"), copyNote = $("copy-note"), camEl = $("cam"), camNote = $("cam-note");
+  const COPY_NOTE = copyNote.textContent;
+  const CAM_SAYS = { asking: "", loading: "Loading his eyes…", looking: "Step back so he can see you", copying: "He’s copying you", failed: "", off: "" };
+  let copied = false;
+  if (!mirror || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) copyBtn.hidden = true;
+  function paintCopy() {
+    const on = !!(mirror && mirror.guide.on);
+    copyBtn.setAttribute("aria-pressed", String(on));
+    put(copyBtn.lastElementChild, on ? "Copying" : "Copy me");
+    camEl.hidden = !on;
+    $("copy-on").hidden = on;
+    $("copy-off").hidden = !on;
+    put(camNote, CAM_SAYS[mirror ? mirror.status : "off"] || "");
+    // once per visit: it found someone, so it works for them
+    if (on && mirror.status === "copying" && !copied) { copied = true; SK.track("copy_me_seen", {}); }
+  }
+  async function copy() {
+    copyNote.textContent = "Allow the camera, then stand back so he can see you.";
+    try {
+      await mirror.camera($("cam-view"));
+      SK.track("copy_me_started", {});
+      acted();
+      show(null);
+      copyNote.textContent = COPY_NOTE;
+      paintCopy();
+      await mirror.load();
+    } catch (e) {
+      const name = e && e.name;
+      copyNote.textContent = name === "NotAllowedError" ? "No permission, so he can’t see you." : name === "NotFoundError" || name === "OverconstrainedError" ? "He can’t find a camera." : name === "NotReadableError" ? "Something else is using the camera." : (e && e.message) || "That didn’t work.";
+      if (name !== "NotAllowedError" && openCard !== $("card-copy")) show($("card-copy"));
+    }
+    paintCopy();
+  }
+  $("copy-on").addEventListener("click", copy);
+  $("copy-off").addEventListener("click", () => { mirror.stop(); copyNote.textContent = COPY_NOTE; paintCopy(); show(null); });
+  setInterval(paintCopy, 500);
+  paintCopy();
+
   // ---------- reset, full screen ----------
   const rstBtn = $("rst"), fsBtn = $("fs");
   rstBtn.addEventListener("click", () => { SK.stage.resetAll(); rstBtn.blur(); });

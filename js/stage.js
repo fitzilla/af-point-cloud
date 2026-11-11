@@ -627,6 +627,11 @@
   // ---------- the music, and the dancing ----------
   const beat = (SK.beat = SK.beatKit.createBeat());
   const dance = (SK.dance = SK.createDance());
+  // Copy me: the webcam (see mirror.js), told how big he is so it can put his feet where theirs are
+  const mirror = (SK.mirror = SK.mirrorKit.createMirror({
+    leg: rig.bones[rig.B.thighL].len + rig.bones[rig.B.shinL].len, hipX: rig.J.hip[0], hipY: rig.J.hip[1],
+    ankleX: rig.J.ankle[0], ankleY: rig.J.ankle[1], torso: rig.J.shoulder[1] - rig.J.hip[1],
+  }));
 
   // ---------- interaction state ----------
   const pointer = { ndc: new THREE.Vector2(9, 9), inside: false, lx: 0, ly: 0, lt: 0 };
@@ -848,8 +853,10 @@
     if (bs.drop) { bs.drop = false; dance.drop(); st.pulse = 1; newPalette(); }
     danceCtx.lookX += ((pointer.inside ? pointer.ndc.x : 0) - danceCtx.lookX) * Math.min(1, dt * 3);
     danceCtx.lookY += ((pointer.inside ? pointer.ndc.y - 0.55 : 0) - danceCtx.lookY) * Math.min(1, dt * 3);
+    danceCtx.mirror = mirror.tick(now, dt);
     const moved = dance.step(dt, danceCtx);
     rig.solve(moved.pose);
+    if (danceCtx.mirror.seen > 0.01) rig.follow(danceCtx.mirror);
     rig.heap(moved.heap);
     rig.write(boneData);
     boneTex.needsUpdate = true;
