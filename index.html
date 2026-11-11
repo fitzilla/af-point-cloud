@@ -72,6 +72,9 @@ body {
 /* the title, top left, until they do something */
 #title { position: fixed; z-index: 2; top: calc(env(safe-area-inset-top, 0px) + 22px); left: calc(var(--edge) + 6px); margin: 0; pointer-events: none; color: var(--tint); font: 400 clamp(48px, 7.4vw, 104px)/0.88 Anton, Impact, "Arial Narrow", sans-serif; letter-spacing: 0.01em; text-transform: uppercase; transition: opacity 1.4s ease, transform 1.4s ease; }
 #title.gone { opacity: 0; transform: translateY(-10px); }
+/* the title and the dock wait for his colours (and the title's font), so nothing changes colour as the page loads */
+body:not(.ready) #title, body:not(.ready) .dock { opacity: 0; transition: none; }
+.dock { transition: opacity 0.6s ease; }
 /* the dock: what's always there, then the two things you switch on */
 .dock {
   position: fixed;
@@ -316,6 +319,6 @@ body {
 <script src="js/mirror.js?v=828cd473"></script>
 <script src="js/dance.js?v=e7773f58"></script>
 <script src="js/stage.js?v=a07aa71a"></script>
-<script src="js/ui.js?v=10c1a640"></script>
+<script src="js/ui.js?v=4f1715b9"></script>
 
 </html>

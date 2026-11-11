@@ -6,6 +6,11 @@
 (function () {
   "use strict";
   const SK = (window.SK = window.SK || {});
+  // by now the stage has picked his colours: show the title and the dock (once the title's font is in,
+  // or after a second at most, so a slow font never hides them)
+  const ready = () => document.body.classList.add("ready");
+  if (document.fonts && document.fonts.load) Promise.race([document.fonts.load('40px Anton'), new Promise((r) => setTimeout(r, 1000))]).then(ready, ready);
+  else ready();
   if (!SK.beat) return;      // the stage didn't start (no WebGL): nothing to control
   const $ = (id) => document.getElementById(id);
   const beat = SK.beat, bs = beat.state;
