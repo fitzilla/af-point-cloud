@@ -44,11 +44,12 @@
   //   image: the same 33 as places in the picture (0 to 1)
   //   aspect: the picture's width over its height
   //   R: his own measurements (see stage.js)
-  function read(g, world, image, aspect, dt, R) {
+  //   snap: write what was seen straight in, with no easing (the caller eases toward it every frame)
+  function read(g, world, image, aspect, dt, R, snap) {
     const at = (i, depth) => [-world[i].x, -world[i].y, -world[i].z * (depth === undefined ? DEPTH : depth)];
     const vis = (i) => { const v = world[i].visibility; return v === undefined ? (image[i].visibility === undefined ? 1 : image[i].visibility) : v; };
     const clear = (...ids) => sm(0.35, 0.65, Math.min(...ids.map(vis)));
-    const quick = 1 - Math.exp(-dt * 22), slow = 1 - Math.exp(-dt * 6);
+    const quick = snap ? 1 : 1 - Math.exp(-dt * 22), slow = 1 - Math.exp(-dt * 6);
     const p = g.pose, want = {};
     // where each wrist is in the picture, so a hand the hand tracker finds can be told from the other
     g.wristAtL = [image[WR_R].x, image[WR_R].y]; g.wristAtR = [image[WR_L].x, image[WR_L].y];
@@ -185,7 +186,22 @@
 
   // The camera and the tracker. `R` is the skeleton's own measurements.
   function createMirror(R) {
-    const g = createGuide();
+    // `seen` is the last thing the camera showed; `g` is what he's given, which glides toward it on every
+    // frame of the picture (not just the thirty a second the tracker manages), so he moves smoothly and
+    // keeps up closely however often the tracker gets a look.
+    const g = createGuide(), seen = createGuide();
+    const DIRS = ["armL", "foreL", "handL", "armR", "foreR", "handR", "wristL", "wristR", "wristHeadL", "wristHeadR"];
+    const NUMS = ["nearHeadL", "nearHeadR", "wArmL", "wArmR", "wWristL", "wWristR", "wLegs", "wTorso", "wHead"];
+    function glide(dt) {
+      const k = 1 - Math.exp(-dt * 30);
+      for (const n of DIRS) for (let i = 0; i < 3; i++) g[n][i] += (seen[n][i] - g[n][i]) * k;
+      for (const n of NUMS) g[n] += (seen[n] - g[n]) * k;
+      for (const n in seen.pose) g.pose[n] += (seen.pose[n] - g.pose[n]) * k;
+    }
+    // When the device can't keep up, the extras go first: hands, then a slower look at the face and the
+    // body. `spent` is how long the trackers have taken lately; it's weighed up every couple of seconds.
+    let level = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches ? 1 : 0, spent = 0, weighed = 0, held = 0, strain = 0, warm = 1e9;
+    const timed = (fn) => { const t0 = performance.now(); try { return fn(); } finally { spent += performance.now() - t0; } };
     let faces = null, lastFace = 0, jawSeen = -9, hands = null, lastHands = 0;
     const gripSeen = { L: -9, R: -9 };
     let video = null, stream = null, tracker = null, loading = null, lastFrame = -1, lastRun = 0, lastSeen = -9, fails = 0, status = "off";
@@ -219,7 +235,8 @@
       if (track) track.addEventListener("ended", stop);      // unplugged, or permission taken away
       const playing = video.play();            // not awaited: the switch flips as soon as the camera is allowed
       if (playing && playing.catch) playing.catch(() => {});
-      g.on = true; g.floor = 0; g.legImg = 0; g.back = 0; g.hipsLately = 0; g.wide = 0; g.turnSign = 1; g.pose.turn = 0; fails = 0; lastSeen = -9;
+      g.on = true; seen.floor = 0; seen.legImg = 0; seen.back = 0; seen.hipsLately = 0; seen.wide = 0; seen.turnSign = 1; seen.pose.turn = g.pose.turn = 0; fails = 0; lastSeen = -9;
+      spent = 0; weighed = 0; strain = 0; if (tracker) warm = performance.now() / 1000;
       status = tracker ? "looking" : "loading";
     }
     // fetches the tracker (once); the camera can already be showing
@@ -228,6 +245,7 @@
       try { tracker = await (loading = loading || fetchTracker()); }
       catch (e) { loading = null; stop(); status = "failed"; throw new Error("His eyes didn’t load. Check your connection and try again."); }
       if (g.on) status = "looking";
+      warm = performance.now() / 1000;
     }
     function stop() {
       if (stream) for (const t of stream.getTracks()) t.stop();
@@ -240,39 +258,52 @@
       // body tracker never shares a frame with both of them)
       const awake = typeof document === "undefined" || !document.hidden;
       let extra = false;
-      if (awake && g.on && tracker && video && video.readyState >= 2 && video.currentTime !== lastFrame && now - lastRun > 1 / 32) {
+      // how hard it's finding this: more than 45% of its time in the trackers and something is dropped;
+      // under 20% for a while and it's brought back
+      if (g.on && now - weighed > 2) {
+        // (the first few seconds don't count: the trackers are slow while they warm up. And one bad
+        // spell isn't enough: it has to struggle twice running.)
+        const busy = weighed && now - warm > 6 ? spent / ((now - weighed) * 1000) : 0;
+        strain = busy > 0.45 ? strain + 1 : 0;
+        if (strain >= 2 && level < 2) { level++; held = now; strain = 0; }
+        else if (busy < 0.2 && level > 0 && now - held > 12 && !(level === 1 && !hands)) level--;
+        spent = 0; weighed = now;
+      }
+      const every = level > 1 ? 1 / 22 : 1 / 32;
+      if (awake && g.on && tracker && video && video.readyState >= 2 && video.currentTime !== lastFrame && now - lastRun > every) {
         const since = Math.min(0.2, now - lastRun);
         lastRun = now; lastFrame = video.currentTime;
         try {
-          const res = tracker.detectForVideo(video, now * 1000);
+          const res = timed(() => tracker.detectForVideo(video, now * 1000));
           if (res && res.worldLandmarks && res.worldLandmarks[0] && res.landmarks && res.landmarks[0]) {
-            read(g, res.worldLandmarks[0], res.landmarks[0], (video.videoWidth || 4) / (video.videoHeight || 3), since, R);
+            read(seen, res.worldLandmarks[0], res.landmarks[0], (video.videoWidth || 4) / (video.videoHeight || 3), since, R, true);
             lastSeen = now;
           }
           fails = 0;
         } catch (e) { if (++fails > 8) { stop(); status = "failed"; } }
-        // the jaw, fifteen times a second: plenty for a mouth, and half the work
-        if (faces && now - lastFace > 1 / 16) {
+        // the jaw, fifteen times a second (eight when it's struggling): plenty for a mouth
+        if (faces && now - lastFace > (level > 1 ? 1 / 8 : 1 / 16)) {
           lastFace = now; extra = true;
           try {
-            const shapes = faces.detectForVideo(video, now * 1000 + 0.5).faceBlendshapes;
+            const shapes = timed(() => faces.detectForVideo(video, now * 1000 + 0.5)).faceBlendshapes;
             const open = shapes && shapes[0] && shapes[0].categories.find((c) => c.categoryName === "jawOpen");
             if (open) { g.jawWant = Math.min(1, Math.max(0, (open.score - 0.04) * 2.2)); jawSeen = now; }
           } catch (e) { faces = null; }      // it's only an extra: stop asking
         }
       }
+      glide(dt);
       // their hands, twelve times a second. A fist's fingertips are about as far from the wrist as its
       // knuckles are; an open hand's are nearly twice as far.
-      if (awake && !extra && g.on && hands && video && video.readyState >= 2 && now - lastHands > 1 / 12) {
+      if (awake && !extra && level < 1 && g.on && hands && video && video.readyState >= 2 && now - lastHands > 1 / 12) {
         lastHands = now;
         try {
-          const res = hands.detectForVideo(video, now * 1000 + 0.25);
+          const res = timed(() => hands.detectForVideo(video, now * 1000 + 0.25));
           (res.landmarks || []).forEach((lm, k) => {
             const w3 = (res.worldLandmarks && res.worldLandmarks[k]) || lm, far = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, (a.z || 0) - (b.z || 0));
             let open = 0;
             for (const [tip, knuckle] of [[8, 5], [12, 9], [16, 13], [20, 17]]) open += far(w3[tip], w3[0]) / Math.max(1e-4, far(w3[knuckle], w3[0])) / 4;
             // whose hand: whichever of his wrists it's nearer in the picture
-            const dL = Math.hypot(lm[0].x - g.wristAtL[0], lm[0].y - g.wristAtL[1]), dR = Math.hypot(lm[0].x - g.wristAtR[0], lm[0].y - g.wristAtR[1]);
+            const dL = Math.hypot(lm[0].x - seen.wristAtL[0], lm[0].y - seen.wristAtL[1]), dR = Math.hypot(lm[0].x - seen.wristAtR[0], lm[0].y - seen.wristAtR[1]);
             const L = dL <= dR ? "L" : "R";
             if (Math.min(dL, dR) > 0.2) return;
             g["gripWant" + L] = Math.min(1, Math.max(0, (1.75 - open) / 0.65));
@@ -281,8 +312,8 @@
         } catch (e) { hands = null; }      // only an extra: stop asking
       }
       for (const L of ["L", "R"]) {
-        const seen = g.on && now - gripSeen[L] < 0.6;
-        g["wGrip" + L] += ((seen ? 1 : 0) - g["wGrip" + L]) * Math.min(1, dt * 5);
+        const gripOn = g.on && now - gripSeen[L] < 0.6;
+        g["wGrip" + L] += ((gripOn ? 1 : 0) - g["wGrip" + L]) * Math.min(1, dt * 5);
         g["grip" + L] += (g["gripWant" + L] - g["grip" + L]) * Math.min(1, dt * 20);
       }
       const mouth = g.on && now - jawSeen < 0.5;
@@ -293,7 +324,7 @@
       if (g.on && tracker) status = there ? "copying" : "looking";
       return g;
     }
-    return { guide: g, camera, load, stop, tick, get status() { return status; } };
+    return { guide: g, camera, load, stop, tick, get status() { return status; }, get level() { return level; } };
   }
 
   const api = { createGuide, read, createMirror };
