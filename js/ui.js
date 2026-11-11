@@ -368,7 +368,10 @@
 
   // ---------- the visitor counter, top right: six digits, like an old hit counter ----------
   const countEl = $("count"), countN = $("count-n");
+  // it only shows once there's a crowd worth boasting about: a counter reading 000007 looks empty
+  const COUNT_FROM = 100;
   function visitors(n) {
+    if (n < COUNT_FROM) { countEl.hidden = true; return; }
     const text = String(Math.max(0, Math.floor(n))).padStart(6, "0");
     if (countN.dataset.n === text) return;
     countN.dataset.n = text;
