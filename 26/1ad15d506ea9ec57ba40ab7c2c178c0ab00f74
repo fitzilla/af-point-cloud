@@ -1,0 +1,22 @@
+js/mirror.js
+  s_2e47aa980f998f::t_dd00c1513de51c 47-48,52,189-204,238-239,248,261-273,277,279,284-285,288,294,297
+  s_2e47aa980f998f::t_12faf7ea5acb3a 300,306,315-316,327
+index.html
+  s_2e47aa980f998f::t_dd00c1513de51c 368,406
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "261ad15d506ea9ec57ba40ab7c2c178c0ab00f74",
+  "prompts": {},
+  "sessions": {
+    "s_2e47aa980f998f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b3c7448d-e150-4670-85f4-faba3ba61633",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "Aaron Fitzsimmons <afitzsimmons@stora.co>"
+    }
+  }
+}
