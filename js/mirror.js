@@ -29,8 +29,8 @@
       on: false, seen: 0, wArmL: 0, wArmR: 0, wLegs: 0, wTorso: 0, wHead: 0,
       armL: down(), foreL: down(), handL: down(), armR: down(), foreR: down(), handR: down(),
       pose: { hx: 0, hy: 0, hz: 0, hrx: 0, hry: 0, hrz: 0, srx: 0, sry: 0, srz: 0, crx: 0, cry: 0, crz: 0, nrx: 0, nry: 0, nrz: 0,
-        fLx: 0, fLy: 0, fLz: 0, fLr: 0, fRx: 0, fRy: 0, fRz: 0, fRr: 0, kL: 0.25, kR: 0.25, air: 0 },
-      floor: 0, legImg: 0, back: 0, hipsLately: 0,
+        fLx: 0, fLy: 0, fLz: 0, fLr: 0, fRx: 0, fRy: 0, fRz: 0, fRr: 0, kL: 0.25, kR: 0.25, air: 0, turn: 0 },
+      floor: 0, legImg: 0, back: 0, hipsLately: 0, wide: 0, turnSign: 1,
     };
   }
 
@@ -56,8 +56,22 @@
       g["wArm" + L] += (clear(sh, el) - g["wArm" + L]) * slow;
     }
 
+    // Which way they're facing. Depth is the tracker's weakest guess, so this goes by something it sees
+    // well: how narrow their shoulders look against how wide they really are. Square on, they're full
+    // width; side on, no width at all; back to the camera, full width the other way round. Depth only
+    // has to say which way they turned. Small turns are left to the hips and chest, below.
+    const wideNow = sub(at(SH_R, 1), at(SH_L, 1));
+    g.wide = Math.max(len(wideNow), g.wide * Math.exp(-dt / 40));
+    const level = Math.sqrt(Math.max(1e-4, g.wide * g.wide - wideNow[1] * wideNow[1]));
+    const round = Math.max(0, Math.acos(clamp(wideNow[0] / level, -1, 1)) - 0.45) * (Math.PI / (Math.PI - 0.45));
+    if (Math.abs(wideNow[2]) > 0.15 * g.wide) g.turnSign = wideNow[2] > 0 ? -1 : 1;
+    const facing = round * g.turnSign;
+    // everything else is measured the way they're facing, as if they'd stayed square on
+    const fc = Math.cos(facing), fs = Math.sin(facing);
+    const square = (v) => [v[0] * fc - v[2] * fs, v[1], v[0] * fs + v[2] * fc];
+
     // hips, back and shoulders
-    const sL = at(SH_R), sR = at(SH_L), hL = at(HIP_R), hR = at(HIP_L);
+    const sL = square(at(SH_R)), sR = square(at(SH_L)), hL = square(at(HIP_R)), hR = square(at(HIP_L));
     const hipAx = sub(hL, hR), shAx = sub(sL, sR), spine = sub(mid(sL, sR), mid(hL, hR));
     const hips = clear(HIP_L, HIP_R);
     const hrz = Math.atan2(hipAx[1], hipAx[0]) * hips, hry = Math.atan2(-hipAx[2], hipAx[0]) * hips * 0.8;
@@ -67,7 +81,7 @@
     // Bending over. Toward and away from the camera is the tracker's weakest guess, so this goes by
     // something it sees well: how much less tall the back has got than it is long. What's left of that
     // after the sideways lean is the bend; only a clear lean away from the camera counts as backward.
-    const back = len(sub(mid(at(SH_R, 1), at(SH_L, 1)), mid(at(HIP_R, 1), at(HIP_L, 1))));
+    const back = len(sub(mid(at(SH_R, 1), at(SH_L, 1)), mid(at(HIP_R, 1), at(HIP_L, 1))));      // (a length: the same whichever way they face)
     g.back = Math.max(back, g.back * Math.exp(-dt / 40));
     const tilt = Math.acos(clamp(spine[1] / Math.max(0.1, g.back), -1, 1)), side = Math.atan2(-spine[0], Math.abs(spine[1]));
     const fold = Math.max(0, Math.sqrt(Math.max(0, tilt * tilt - side * side)) - 0.12) * 1.1;
@@ -83,7 +97,7 @@
     g.wTorso += (clear(SH_L, SH_R) - g.wTorso) * slow;
 
     // head: the ears give the tilt, and where the nose sits between them gives the turn and the nod
-    const eL = at(EAR_R, 1), eR = at(EAR_L, 1), ears = sub(eL, eR), nose = sub(at(NOSE, 1), mid(eL, eR));
+    const eL = square(at(EAR_R, 1)), eR = square(at(EAR_L, 1)), ears = sub(eL, eR), nose = sub(square(at(NOSE, 1)), mid(eL, eR));
     want.nrz = clamp(Math.atan2(ears[1], ears[0]) - roll, -0.7, 0.7);
     // (how far the nose is off centre against how wide apart the ears look: no depth needed, which is as well)
     want.nry = clamp(Math.atan2(nose[0] * 1.5, Math.abs(ears[0]) + 0.02) * 1.4 - (want.hry + want.cry), -1.2, 1.2);
@@ -103,7 +117,7 @@
     // hips sit wherever that leaves them (so a squat is a squat)
     const reach = {};
     for (const [L, s, hip, kn, an] of [["L", 1, HIP_R, KN_R, AN_R], ["R", -1, HIP_L, KN_L, AN_L]]) {
-      const H = at(hip), K = at(kn), A = at(an), thigh = sub(K, H);
+      const H = square(at(hip)), K = square(at(kn)), A = square(at(an)), thigh = sub(K, H);
       const k = R.leg / Math.max(0.3, len(thigh) + len(sub(A, K)));
       const to = sub(A, H).map((x) => x * k), line = unit(to), along = thigh[0] * line[0] + thigh[1] * line[1] + thigh[2] * line[2];
       const off = [thigh[0] - line[0] * along, thigh[1] - line[1] * along, thigh[2] - line[2] * along], bent = len(off);
@@ -129,6 +143,8 @@
     g.wLegs += (legs - g.wLegs) * slow;
 
     for (const k in want) p[k] += (want[k] - p[k]) * quick;
+    // the turn goes the short way round, and keeps counting, so a full spin is a full spin
+    p.turn += (facing - p.turn - 2 * Math.PI * Math.round((facing - p.turn) / (2 * Math.PI))) * quick;
     return g;
   }
 
@@ -156,7 +172,7 @@
       if (track) track.addEventListener("ended", stop);      // unplugged, or permission taken away
       const playing = video.play();            // not awaited: the switch flips as soon as the camera is allowed
       if (playing && playing.catch) playing.catch(() => {});
-      g.on = true; g.floor = 0; g.legImg = 0; g.back = 0; g.hipsLately = 0; fails = 0; lastSeen = -9;
+      g.on = true; g.floor = 0; g.legImg = 0; g.back = 0; g.hipsLately = 0; g.wide = 0; g.turnSign = 1; g.pose.turn = 0; fails = 0; lastSeen = -9;
       status = tracker ? "looking" : "loading";
     }
     // fetches the tracker (once); the camera can already be showing

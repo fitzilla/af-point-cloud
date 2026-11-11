@@ -51,7 +51,10 @@
 
   // ---------- what each bone looks like ----------
   // seg: a tapered rod from a to b. ell: an ellipse (ring: just its band). g: glyph size (1 big, 2 small,
-  // 0 none: dust only). z: how far toward the viewer. Holes are cut out of everything on that bone.
+  // 0 none: dust only). z: how far toward his front. tx: an ellipse tipped front-to-back across its
+  // width, so it isn't flat. ball: an ellipse that's really a dome that deep (negative: the back of one).
+  // He is built to be seen from any side: the ribs are a barrel, the pelvis a bowl, the skull a ball.
+  // Holes are cut out of everything on the front of that bone.
   const seg = (ax, ay, bx, by, r0, r1, o) => Object.assign({ t: "seg", a: [ax, ay], b: [bx, by], r0, r1: r1 === undefined ? r0 : r1, g: 1, z: 0 }, o);
   const ell = (cx, cy, rx, ry, o) => Object.assign({ t: "ell", c: [cx, cy], r: [rx, ry], g: 1, z: 0 }, o);
   const shapes = [], holes = [];
@@ -59,17 +62,18 @@
 
   // pelvis: two wings, the sacrum between them, and the two loops underneath
   for (const s of [-1, 1]) {
-    shapes[B.pelvis].push(ell(s * 0.2, 0.11, 0.165, 0.14, { ring: 0.07, w: 1.6 }), ell(s * 0.2, 0.11, 0.1, 0.08, { g: 0, w: 0.35 }));
-    shapes[B.pelvis].push(ell(s * 0.095, -0.1, 0.085, 0.075, { ring: 0.036, g: 2 }), ell(s * 0.2, 0.03, 0.05, 0.05, { g: 0 }));
+    // (each wing swings forward as it goes out, so from above the pelvis is a bowl open at the front)
+    shapes[B.pelvis].push(ell(s * 0.2, 0.11, 0.165, 0.14, { ring: 0.07, w: 1.6, tx: s * 0.75 }), ell(s * 0.2, 0.11, 0.1, 0.08, { g: 0, w: 0.35, tx: s * 0.75 }));
+    shapes[B.pelvis].push(ell(s * 0.095, -0.1, 0.085, 0.075, { ring: 0.036, g: 2, z: 0.07 }), ell(s * 0.2, 0.03, 0.05, 0.05, { g: 0 }));
   }
-  shapes[B.pelvis].push(seg(0, 0.2, 0, -0.03, 0.075, 0.03, { g: 2 }));
+  shapes[B.pelvis].push(seg(0, 0.2, 0, -0.03, 0.075, 0.03, { g: 2, z: -0.09 }));
   // the spine is a stack of little blocks all the way up
   const vertebrae = (bone, n, y0, y1, half, r, z) => {
     for (let i = 0; i < n; i++) { const y = y0 + ((y1 - y0) * i) / Math.max(1, n - 1); shapes[bone].push(seg(-half, y, half, y, r, r, { g: 2, z })); }
   };
-  vertebrae(B.spine, 5, 0.035, 0.345, 0.062, 0.03, 0);
-  vertebrae(B.chest, 9, 0.02, 0.58, 0.036, 0.021, -0.07);
-  vertebrae(B.neck, 3, 0.02, 0.12, 0.04, 0.021, 0);
+  vertebrae(B.spine, 5, 0.035, 0.345, 0.062, 0.03, -0.07);       // the spine runs up his back
+  vertebrae(B.chest, 9, 0.02, 0.58, 0.036, 0.021, -0.15);
+  vertebrae(B.neck, 3, 0.02, 0.12, 0.04, 0.021, -0.05);
   // ribcage: each rib leaves the spine at the back, swings round the side and comes back in at the front
   const RIBS = [0.19, 0.25, 0.295, 0.32, 0.335, 0.34, 0.335, 0.315, 0.285, 0.245];
   RIBS.forEach((w, i) => {
@@ -78,25 +82,28 @@
       let px = 0, py = 0, pz = 0;
       for (let k = 0; k <= steps; k++) {
         const u = (k / steps) * reach;
-        const x = s * w * Math.sin(Math.PI * (u * 0.94 + 0.03)), y = top - 0.17 * u - 0.03 * Math.sin(Math.PI * u), z = 0.03 - 0.1 * Math.cos(Math.PI * u);
+        const x = s * w * Math.sin(Math.PI * (u * 0.94 + 0.03)), y = top - 0.17 * u - 0.03 * Math.sin(Math.PI * u), z = 0.02 - 0.17 * Math.cos(Math.PI * u);
         if (k) shapes[B.chest].push(seg(px, py, x, y, 0.016, 0.016, { g: 2, z: (pz + z) / 2 }));
         px = x; py = y; pz = z;
       }
     }
   });
-  shapes[B.chest].push(seg(0, 0.53, 0, 0.21, 0.036, 0.02, { g: 2, z: 0.13 }));
+  shapes[B.chest].push(seg(0, 0.53, 0, 0.21, 0.036, 0.02, { g: 2, z: 0.19 }));
   for (const s of [-1, 1]) {
-    shapes[B.chest].push(seg(s * 0.04, 0.55, s * 0.345, 0.585, 0.021, 0.021, { g: 2, z: 0.09 }));
-    shapes[B.chest].push(ell(s * 0.27, 0.42, 0.07, 0.115, { ring: 0.02, g: 0, z: -0.1, w: 0.6 }));
+    shapes[B.chest].push(seg(s * 0.04, 0.55, s * 0.345, 0.585, 0.021, 0.021, { g: 2, z: 0.13 }));
+    shapes[B.chest].push(ell(s * 0.27, 0.42, 0.07, 0.115, { ring: 0.02, g: 0, z: -0.17, w: 0.6 }));
   }
   // skull: a round cranium, a narrower face, cheekbones, and a row of teeth
   shapes[B.head].push(ell(0, 0.27, 0.2, 0.215, { ball: 0.2, w: 1.3 }), ell(0, 0.125, 0.135, 0.115, { ball: 0.12 }));
+  const skullBack = ell(0, 0.27, 0.2, 0.215, { ball: -0.2, w: 0.5 });      // added after the face and teeth, so a typed word reads down his front first
   for (const s of [-1, 1]) shapes[B.head].push(seg(s * 0.12, 0.165, s * 0.19, 0.205, 0.024, 0.02, { g: 0, z: 0.06 }));
   for (let i = 0; i < 6; i++) shapes[B.head].push(seg(-0.075 + i * 0.03, 0.07, -0.075 + i * 0.03, 0.035, 0.0115, 0.0115, { g: 0, z: 0.1, w: 2 }));
+  shapes[B.head].push(skullBack);
   holes[B.head].push({ c: [-0.085, 0.215], r: [0.058, 0.05] }, { c: [0.085, 0.215], r: [0.058, 0.05] }, { c: [0, 0.128], r: [0.026, 0.04] });
   // jaw: a U, and the bottom teeth
   const JAW = [[-0.135, 0.02], [-0.118, -0.05], [-0.07, -0.095], [0, -0.108], [0.07, -0.095], [0.118, -0.05], [0.135, 0.02]];
-  for (let i = 1; i < JAW.length; i++) shapes[B.jaw].push(seg(JAW[i - 1][0], JAW[i - 1][1], JAW[i][0], JAW[i][1], 0.025, 0.025, { g: 2, z: 0.05 }));
+  // (the chin juts forward and the hinges sit back by his ears: a horseshoe, seen from above)
+  for (let i = 1; i < JAW.length; i++) shapes[B.jaw].push(seg(JAW[i - 1][0], JAW[i - 1][1], JAW[i][0], JAW[i][1], 0.025, 0.025, { g: 2, z: 0.12 - 0.13 * Math.abs(JAW[i - 1][0] + JAW[i][0]) / 0.27 }));
   for (let i = 0; i < 6; i++) shapes[B.jaw].push(seg(-0.075 + i * 0.03, -0.012, -0.075 + i * 0.03, -0.045, 0.0115, 0.0115, { g: 0, z: 0.1, w: 2 }));
   // arms and legs: a shaft with a knob at each end; forearm and shin are two bones side by side.
   // Bones that hang down have their x mirrored, so `out` is the side away from the body on both sides.
@@ -125,7 +132,7 @@
 
   // ---------- handing out homes ----------
   const R = Math.random;
-  const inHole = (bone, x, y) => holes[bone].some((h) => ((x - h.c[0]) / h.r[0]) ** 2 + ((y - h.c[1]) / h.r[1]) ** 2 < 1);
+  const inHole = (bone, x, y, z) => z > 0 && holes[bone].some((h) => ((x - h.c[0]) / h.r[0]) ** 2 + ((y - h.c[1]) / h.r[1]) ** 2 < 1);
   const area = (p) => (p.t === "seg" ? Math.hypot(p.b[0] - p.a[0], p.b[1] - p.a[1]) * (p.r0 + p.r1) : p.ring ? Math.PI * (p.r[0] + p.r[1]) * p.ring : Math.PI * p.r[0] * p.r[1]) * (p.w || 1);
   const out3 = [0, 0, 0];
   // one random point on a shape; `rim` keeps it on the outline, which is what makes the edges crisp
@@ -142,8 +149,8 @@
       out3[0] = p.c[0] + Math.cos(a) * p.r[0] * k;
       out3[1] = p.c[1] + Math.sin(a) * p.r[1] * k;
       const deep = p.ball ? p.ball * Math.sqrt(Math.max(0, 1 - k * k)) : Math.min(p.r[0], p.r[1]) * 0.35;
-      // a ball's points sit on its shell, front and back, so the skull reads as round when he turns
-      out3[2] = p.z + (p.ball ? (R() < 0.6 ? 1 : -1) * deep * (0.85 + 0.15 * R()) : (R() * 2 - 1) * deep);
+      // a dome's points sit on its shell
+      out3[2] = p.z + (p.tx || 0) * (out3[0] - p.c[0]) + (p.ball ? deep * (0.85 + 0.15 * R()) : (R() * 2 - 1) * deep);
     }
   }
 
@@ -168,16 +175,17 @@
           for (let k = 0; k < along && i < n; k++) for (let c = 0; c < across && i < n; c++) {
             const t = (k + 0.5) / along, o = across > 1 ? ((c + 0.5) / across * 2 - 1) * (p.r0 + (p.r1 - p.r0) * t) * 0.62 : 0;
             const x = p.a[0] + dx * t - (dy / l) * o, y = p.a[1] + dy * t + (dx / l) * o;
-            if (inHole(bone, x, y)) continue;
+            if (inHole(bone, x, y, p.z + 0.02)) continue;
             const j = put(bone, x, y, p.z + 0.02, 1);
             ang[j] = a; size[j] = s;
           }
         } else {
           for (let y = p.c[1] + p.r[1] - s * 0.5; y > p.c[1] - p.r[1] && i < n; y -= s) for (let x = p.c[0] - p.r[0] + s * 0.5; x < p.c[0] + p.r[0] && i < n; x += s) {
             const q = ((x - p.c[0]) / p.r[0]) ** 2 + ((y - p.c[1]) / p.r[1]) ** 2;
-            if (q > 1 || inHole(bone, x, y)) continue;
+            const z = p.z + (p.tx || 0) * (x - p.c[0]) + (p.ball ? p.ball * Math.sqrt(Math.max(0, 1 - q)) : 0.02);
+            if (q > 1 || inHole(bone, x, y, z)) continue;
             if (p.ring && Math.sqrt(q) < 1 - (p.ring * 1.3) / Math.min(p.r[0], p.r[1])) continue;
-            const j = put(bone, x, y, p.z + (p.ball ? p.ball * Math.sqrt(1 - q) : 0.02), 1);
+            const j = put(bone, x, y, z, 1);
             ang[j] = 0; size[j] = s;
           }
         }
@@ -195,13 +203,13 @@
       const count = Math.round((a / total) * boneN);
       for (let k = 0; k < count && i < n - airN; k++) {
         let tries = 0;
-        do sample(p, R() < 0.3); while (inHole(bone, out3[0], out3[1]) && ++tries < 8);
+        do sample(p, R() < 0.3); while (inHole(bone, out3[0], out3[1], out3[2]) && ++tries < 8);
         if (tries >= 8) continue;
         put(bone, out3[0], out3[1], out3[2], 0);
       }
     }
     // rounding leaves a few spare: they go to the skull, where detail is most looked at
-    while (i < n - airN) { const p = shapes[B.head][R() < 0.6 ? 0 : 1]; sample(p, R() < 0.3); if (!inHole(B.head, out3[0], out3[1])) put(B.head, out3[0], out3[1], out3[2], 0); }
+    while (i < n - airN) { const p = shapes[B.head][R() < 0.6 ? 0 : 1]; sample(p, R() < 0.3); if (!inHole(B.head, out3[0], out3[1], out3[2])) put(B.head, out3[0], out3[1], out3[2], 0); }
     for (let k = 0; k < floorN && i < n; k++) {
       const ring = Math.ceil(R() * 7), a = R() * Math.PI * 2, r = ring * 0.26 + (R() - 0.5) * 0.012;
       put(B.air, Math.cos(a) * r, FLOOR - 0.02, Math.sin(a) * r * 0.9, 0);
@@ -221,9 +229,10 @@
     aRa: 0.1, aRf: 0, aRt: 0, aRb: 0.12, aRz: 0, aRh: 0,
     fLx: 0, fLy: 0, fLz: 0, fLr: 0, fRx: 0, fRy: 0, fRz: 0, fRr: 0,   // feet: sideways, lift, forward, turn
     kL: 0.25, kR: 0.25, air: 0,                             // knees: how far they point outward (negative: knocked in); jump
+    turn: 0,                                                // all of him, turned on the spot (a quarter turn is PI / 2; any amount is fine)
   }, fill);
 
-  const m1 = new THREE.Matrix4(), m2 = new THREE.Matrix4(), e = new THREE.Euler();
+  const m1 = new THREE.Matrix4(), m2 = new THREE.Matrix4(), m3 = new THREE.Matrix4(), e = new THREE.Euler();
   const a1 = new THREE.Vector3(), a2 = new THREE.Vector3(), a3 = new THREE.Vector3(), a4 = new THREE.Vector3(), a5 = new THREE.Vector3();
   const rot = (x, y, z, order) => m1.makeRotationFromEuler(e.set(x, y, z, order || "XYZ"));
   const child = (b, parent) => bones[b].world.copy(bones[parent === undefined ? bones[b].parent : parent].world).multiply(bones[b].local);
@@ -277,6 +286,13 @@
     px.setFromMatrixColumn(w(B.pelvis), 0);
     leg("L", 1, p, px);
     leg("R", -1, p, px);
+    // turning on the spot: everything above was worked out facing front, and now all of him swings
+    // round the upright line through his hips
+    if (p.turn) {
+      const cx = J.pelvis[0] + p.hx, cz = p.hz;
+      m2.makeTranslation(cx, 0, cz).multiply(m1.makeRotationY(p.turn)).multiply(m3.makeTranslation(-cx, 0, -cz));
+      for (let i = 0; i < NB - 1; i++) bones[i].world.premultiply(m2);
+    }
   }
 
   // ---------- copying someone ----------

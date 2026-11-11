@@ -49,7 +49,7 @@
     if (card) card.focus({ preventScroll: true });
   }
   for (const t of triggers) t.addEventListener("click", () => { const card = $(t.dataset.card); show(openCard === card ? null : card); });
-  addEventListener("pointerdown", (e) => { if (openCard && !openCard.contains(e.target) && !e.target.closest(".dock")) show(null); });
+  addEventListener("pointerdown", (e) => { if (openCard && !openCard.contains(e.target) && !e.target.closest(".dock, #corner")) show(null); });
   addEventListener("keydown", (e) => { if (e.key === "Escape" && openCard) show(null); });
   for (const card of cards) {
     const grab = document.createElement("i");
@@ -365,5 +365,18 @@
   document.addEventListener("fullscreenchange", paintFs);
   document.addEventListener("webkitfullscreenchange", paintFs);
 
-  SK.ui = { tap, acted, play, videoId, songs: SONGS };
+  // ---------- the visitor counter, top right: six digits, like an old hit counter ----------
+  const countEl = $("count"), countN = $("count-n");
+  function visitors(n) {
+    const text = String(Math.max(0, Math.floor(n))).padStart(6, "0");
+    if (countN.dataset.n === text) return;
+    countN.dataset.n = text;
+    countN.textContent = "";
+    for (const d of text) { const i = document.createElement("i"); i.textContent = d; countN.append(i); }
+    countEl.setAttribute("aria-label", `${Number(text)} visitors`);
+    countEl.hidden = false;
+  }
+  if (params.has("count")) visitors(+params.get("count") || 0);      // for looking at it without the relay
+
+  SK.ui = { tap, acted, play, videoId, visitors, songs: SONGS };
 })();

@@ -99,6 +99,15 @@
       p.air = 0.24 * Math.pow(a, 0.7); p.hy = -0.03 - 0.1 * hit(ph, 4); p.kL = p.kR = 0.35; p.fLy = p.fRy = 0.03 * a;
       p.aLa = p.aRa = 2.75 + 0.15 * sn(ph, 1); p.aLz = p.aRz = 0.2; p.nrx = -0.15 + 0.2 * hit(ph); p.jaw = 0.5 * a;
     },
+    // arms out, wind up, and once right round on the spot, twice a phrase
+    pirouette(ph, p) {
+      const c = ph % 4, go = sm(1.6, 3.4, c), wind = sm(0.6, 1.5, c) * (1 - sm(1.5, 1.9, c));
+      p.turn = TAU * go - 0.5 * wind;      // back to nought each time round, which is the same place
+      const tuck = Math.sin(Math.PI * go);
+      p.aLa = p.aRa = 1.45 - 1.0 * tuck; p.aLb = p.aRb = 0.15 + 1.5 * tuck; p.aLf = p.aRf = 0.5 * tuck;
+      p.fRy = 0.28 * tuck; p.fRx = 0.1 * tuck; p.kR = 0.25 + 0.9 * tuck; p.air = 0.05 * tuck; p.hy = -0.05 - 0.08 * wind;
+      p.nry = 0.5 * wind - 0.4 * tuck; p.crz = 0.06 * sn(ph, 4); p.jaw = 0.5 * tuck;
+    },
     // ---------- the heavy end: rock and metal ----------
     // horns up: both arms to the sky, leaning back and screaming at the ceiling
     horns(ph, p) {
@@ -268,6 +277,9 @@
         const w = sn(ph, 1);
         p.hx = 0.15 * w; p.hrz = 0.22 * w; p.srz = -0.14 * w; p.hry = 0.2 * sn(ph, 1, 0.25); p.hy = -0.14; p.nrz = 0.1 * w; p.jaw = 0.3;
       }
+      // each time round he faces a quarter turn further on, as the dance goes
+      const round = Math.floor(ph / 16) % 4;
+      p.turn = -(Math.PI / 2) * (round + (step === 15 ? sm(0.1, 0.9, f) : 0));
       if (step === 15) {                      // hey!
         const up = Math.sin(Math.PI * f);
         p.air = 0.22 * up; p.jaw = 1; p.nrx = -0.3;
@@ -354,19 +366,19 @@
     sway: 0.2, nodSnap: 0.25, armWave: 0.3, hipSway: 0.4, stepTouch: 0.4, rickSway: 0.45, moonwalk: 0.45, sideClap: 0.5, bounce: 0.5, robot: 0.5,
     egyptian: 0.5, rattle: 0.5, zombie: 0.5, twist: 0.6, discoPoint: 0.6, shimmy: 0.6, kneeKnock: 0.6, sprinkler: 0.6, macarena: 0.6, bigFish: 0.65,
     charleston: 0.7, ymca: 0.7, dab: 0.7, airDrums: 0.75, floss: 0.8, runningMan: 0.8, shuffle: 0.8, windmill: 0.8, armsWave: 0.8, fistPump: 0.85,
-    gangnam: 0.85, headbang: 0.9, kicks: 0.9, headPop: 0.9, pogo: 1, bean: 0.55, hipThrust: 0.65, routine: 0.7, griddy: 0.75, stayinAlive: 0.65,
+    gangnam: 0.85, headbang: 0.9, kicks: 0.9, headPop: 0.9, pogo: 1, bean: 0.55, hipThrust: 0.65, routine: 0.7, griddy: 0.75, stayinAlive: 0.65, pirouette: 0.6,
     horns: 0.85, mosh: 1, hairWhip: 0.9, kneeSlide: 0.8, duckWalk: 0.85, hammer: 0.9,
   };
   // what kind of music it is decides which dances are on the table (beat.js guesses the kind from the title)
   const STYLES = {
-    chill: ["sway", "nodSnap", "armWave", "hipSway", "stepTouch", "moonwalk", "rickSway"],
-    disco: ["stayinAlive", "discoPoint", "stepTouch", "twist", "shimmy", "sideClap", "sprinkler", "hipSway", "kneeKnock", "armsWave", "charleston", "armWave", "hipThrust", "routine", "bean"],
-    pop: ["stepTouch", "sideClap", "floss", "rickSway", "twist", "shimmy", "runningMan", "robot", "egyptian", "bigFish", "sprinkler", "kneeKnock", "armsWave", "headPop", "dab", "moonwalk", "sway", "pogo", "griddy", "routine", "bean", "hipThrust"],
+    chill: ["sway", "nodSnap", "armWave", "hipSway", "stepTouch", "moonwalk", "rickSway", "pirouette"],
+    disco: ["stayinAlive", "discoPoint", "stepTouch", "twist", "shimmy", "sideClap", "sprinkler", "hipSway", "kneeKnock", "armsWave", "charleston", "armWave", "hipThrust", "routine", "bean", "pirouette"],
+    pop: ["stepTouch", "sideClap", "floss", "rickSway", "twist", "shimmy", "runningMan", "robot", "egyptian", "bigFish", "sprinkler", "kneeKnock", "armsWave", "headPop", "dab", "moonwalk", "sway", "pogo", "griddy", "routine", "bean", "hipThrust", "pirouette"],
     rock: ["headbang", "airDrums", "windmill", "duckWalk", "kneeSlide", "horns", "fistPump", "hammer", "pogo", "kicks", "twist", "kneeKnock", "headPop", "nodSnap", "stepTouch", "hipThrust", "hairWhip"],
     metal: ["headbang", "hairWhip", "horns", "mosh", "hammer", "kneeSlide", "airDrums", "windmill", "duckWalk", "fistPump", "pogo"],
     rave: ["fistPump", "shuffle", "runningMan", "bigFish", "pogo", "armsWave", "robot", "floss", "headPop", "bounce", "armWave", "griddy"],
     hiphop: ["bounce", "armWave", "dab", "robot", "runningMan", "nodSnap", "floss", "moonwalk", "kneeKnock", "sway", "griddy", "hipThrust"],
-    latin: ["hipSway", "stepTouch", "shimmy", "sideClap", "twist", "armsWave", "sway", "hipThrust"],
+    latin: ["hipSway", "stepTouch", "shimmy", "sideClap", "twist", "armsWave", "sway", "hipThrust", "pirouette"],
     spooky: ["rattle", "kneeKnock", "zombie", "headPop", "charleston", "egyptian", "shimmy", "kicks", "robot", "sway", "pogo", "bean"],
   };
 
@@ -397,7 +409,7 @@
   const RISE = { footL: 0, footR: 0.05, shinL: 0.14, shinR: 0.19, thighL: 0.3, thighR: 0.35, pelvis: 0.46, spine: 0.56, chest: 0.66, armL: 0.8, armR: 0.84, foreL: 0.92, foreR: 0.96, handL: 1.04, handR: 1.08, neck: 1.12, head: 1.3, jaw: 1.42 };
 
   // which parts of the pose Copy me speaks for (see mirror.js)
-  const TORSO = ["hx", "hz", "hrx", "hrz", "hry", "srx", "sry", "srz", "crx", "cry", "crz"], HEAD = ["nrx", "nry", "nrz"];
+  const TORSO = ["hx", "hz", "hrx", "hrz", "hry", "srx", "sry", "srz", "crx", "cry", "crz", "turn"], HEAD = ["nrx", "nry", "nrz"];
   const LEGS = ["hy", "air", "fLx", "fLy", "fLz", "fLr", "fRx", "fRy", "fRz", "fRr", "kL", "kR"];
 
   SK.createDance = function () {
@@ -436,7 +448,7 @@
       p.snap = 0;
       MOVES[name](ph, p);
       const amp = Math.min(1.15, 0.55 + 0.6 * energy);
-      for (const k of keys) if (k !== "spin") p[k] = neutral[k] + (p[k] - neutral[k]) * amp;
+      for (const k of keys) if (k !== "spin" && k !== "turn") p[k] = neutral[k] + (p[k] - neutral[k]) * amp;      // a turn is a turn, however lively he is
     };
 
     // c: { beat, bpm, vibe, energy, going, lookX, lookY, t }. Returns { pose, heap, landed }.
@@ -464,6 +476,7 @@
       const w = sm(0, 0.75, db - curStart);
       if (w < 1) {
         fill(b, prev, db, vigour);
+        b.turn += TAU * Math.round((a.turn - b.turn) / TAU);      // whichever way round is shorter
         for (const k of keys) a[k] = k === "spin" ? (w > 0.5 ? a[k] : b[k]) : b[k] + (a[k] - b[k]) * w;
         a.snap = Math.max(a.snap, b.snap);
       }
@@ -549,6 +562,7 @@
       out.aLa += (1.5 - out.aLa) * tada; out.aRa += (1.5 - out.aRa) * tada; out.aLz += (0.3 - out.aLz) * tada; out.aRz += (0.3 - out.aRz) * tada;
 
       const quick = a.snap || (g && g.seen > 0.5) ? 3 : 1;      // copying someone, he keeps up
+      now.turn += TAU * Math.round((out.turn - now.turn) / TAU);      // a whole turn more or less is the same place: never unwind one
       for (const k of keys) now[k] += (out[k] - now[k]) * Math.min(1, dt * RATE(k) * quick);
 
       // the heap

@@ -400,6 +400,11 @@
       float depth = clamp(1.0 - (-mv.z - uCamDist) * 0.45, 0.2, 1.35);
       vColor = c * depth;
       vAlpha = mix(0.34, 0.95, glyph) * (0.6 + 0.4 * aRand.z) * (1.0 + sw * 0.8);
+      // His skull and ribcage are solid: what's on their far side from here is seen through them, dimly.
+      // (That's what makes the back of his head the back of his head.)
+      float solid = step(1.5, bone) * step(bone, 5.5) * (1.0 - step(2.5, bone) * step(bone, 3.5));
+      float facing = (modelViewMatrix * vec4(boneAt(bone, vec4(0.0, 0.0, 1.0, 0.0), 0.0), 0.0)).z;
+      vAlpha *= mix(1.0, 0.3, solid * smoothstep(0.015, 0.09, -H.z * facing));
       // he brightens on every beat, and the high end of the music sets his dust glinting
       vAlpha *= 1.0 + uKick * 0.45 * (1.0 - air);
       vAlpha *= 1.0 + uTreble * 0.9 * step(0.72, hash21(vec2(aRand.x * 91.0, tq)));
@@ -613,7 +618,7 @@
     velScreen: new THREE.Vector2(), velScreenTarget: new THREE.Vector2(),
     velWorld: new THREE.Vector3(), lastHit: null, parX: 0, parY: 0,
   };
-  const overUI = (e) => e.target instanceof Element && !!e.target.closest(".dock, .card, #tube, #cam");
+  const overUI = (e) => e.target instanceof Element && !!e.target.closest(".dock, .card, #tube, #cam, #corner");
 
   function onMove(e) {
     const now = performance.now() / 1000;
@@ -736,6 +741,13 @@
       try { m = JSON.parse(e.data); } catch (err) { return; }
       if (m.t === "c") peerMove(m);
       else if (m.t === "l" || m.t === "x") peerGone(m.id, m.t === "x");
+      // the visitor counter: the relay says how many there have been; this browser adds itself once a day
+      if ((m.t === "hi" || m.t === "n") && typeof m.n === "number" && SK.ui && SK.ui.visitors) SK.ui.visitors(m.n);
+      if (m.t === "hi") {
+        try {
+          if (Date.now() - (+localStorage.getItem("af-bones-visit") || 0) > 12 * 3600e3) { localStorage.setItem("af-bones-visit", String(Date.now())); send({ t: "v" }); }
+        } catch (err) { /* no storage: not counted */ }
+      }
     };
     ws.onclose = () => {
       mp.ws = null;
