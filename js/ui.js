@@ -414,12 +414,11 @@
   // the social links are built when the card opens, so they carry the song that's on
   const NETWORKS = {
     "share-x": (u, t) => `https://x.com/intent/post?text=${encodeURIComponent(t)}&url=${encodeURIComponent(u)}`,
-    "share-bsky": (u, t) => `https://bsky.app/intent/compose?text=${encodeURIComponent(t + " " + u)}`,
     "share-whatsapp": (u, t) => `https://wa.me/?text=${encodeURIComponent(t + " " + u)}`,
     "share-linkedin": (u) => `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(u)}`,
     "share-facebook": (u) => `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(u)}`,
   };
-  $("share").addEventListener("click", () => {
+  $("info").addEventListener("click", () => {
     shareNote.textContent = "";
     for (const id in NETWORKS) $(id).href = NETWORKS[id](shareUrl(), shareText());
   });
