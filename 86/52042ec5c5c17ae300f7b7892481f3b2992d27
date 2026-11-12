@@ -1,0 +1,31 @@
+index.html
+  s_2e47aa980f998f::t_e3a66c176ffe80 404
+  s_2e47aa980f998f::t_5290a397b65d68 368,408-409
+js/stage.js
+  s_2e47aa980f998f::t_5290a397b65d68 724-729,742-743,812-814
+js/ui.js
+  s_2e47aa980f998f::t_5290a397b65d68 181-182,204-212,253,267-272
+sitemap.xml
+  s_2e47aa980f998f::t_5290a397b65d68 3
+js/beat.js
+  s_2e47aa980f998f::t_11dab893ea8c9b 141,300-301
+  s_2e47aa980f998f::t_5290a397b65d68 124-125,131,134-138,140,147-152,154-156,271-287,319
+  s_2e47aa980f998f::t_e3a66c176ffe80 132,139,142-146,153,159
+  s_2e47aa980f998f::t_6fbd6bd3027077 133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8652042ec5c5c17ae300f7b7892481f3b2992d27",
+  "prompts": {},
+  "sessions": {
+    "s_2e47aa980f998f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b3c7448d-e150-4670-85f4-faba3ba61633",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Aaron Fitzsimmons <afitzsimmons@stora.co>"
+    }
+  }
+}
