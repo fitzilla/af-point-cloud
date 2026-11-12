@@ -178,7 +178,8 @@
     show(null);
     tube.hidden = false;
     nowEl.textContent = current.name ? `${current.name} · ${current.by}` : "Loading…";
-    beat.setSong({ title: current.name ? `${current.name} ${current.by}` : "", bpm: current.bpm, vibe: current.vibe, style: current.style });
+    beat.setSong({ id: current.id, title: current.name ? `${current.name} ${current.by}` : "", bpm: current.bpm, vibe: current.vibe, style: current.style });
+    if (SK.relay) SK.relay.askCue(current.id);      // has anyone taught him this one's beat?
     paint();
     // (The song isn't kept in the address bar: a refresh starts from scratch. The Share button makes a
     // link with the song in it.)
@@ -200,6 +201,15 @@
       nowEl.textContent = e.message + ". Check your connection and try again.";
     }
   }
+  // The video's clock, for the beat to follow. The player only reports its time a few times a second,
+  // so between reports it's carried on from the last one.
+  let vtAt = -1, vtWas = -1, vtSeen = 0;
+  SK.videoClock = () => {
+    if (!player || !player.getCurrentTime || tube.hidden || wanted !== (current && current.id)) return null;
+    const playing = player.getPlayerState && player.getPlayerState() === 1, t = player.getCurrentTime(), now = performance.now() / 1000;
+    if (t !== vtWas) { vtWas = t; vtAt = t; vtSeen = now; }
+    return { t: playing ? vtAt + (now - vtSeen) * (player.getPlaybackRate ? player.getPlaybackRate() : 1) : vtAt, playing };
+  };
   function stopSong() {
     wanted = null;
     if (player && player.stopVideo) player.stopVideo();
@@ -240,7 +250,7 @@
   const canTab = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) && !matchMedia("(pointer: coarse)").matches;
   if (!canTab) $("listen-tab").hidden = true;
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) listenBtn.hidden = true;
-  let listenMsg = "", listenUntil = 0, asking = false;
+  let listenMsg = "", listenUntil = 0, asking = false, taught = "";
   function sayListen(text, secs) { listenMsg = text; listenUntil = performance.now() + secs * 1000; paint(); }
   function paint() {
     const on = !!bs.listening;
@@ -254,6 +264,12 @@
     const msg = performance.now() < listenUntil ? listenMsg : "";
     put(listenSay, msg || (on ? (bs.locked ? "On the real beat" : "Finding the beat…") : songless ? "Pick a song first" : bs.playing ? "Guessing the beat" : "Uses your mic"));
     listenBtn.classList.toggle("nudge", !on && !asking && bs.playing && !tube.hidden);
+    // he's heard this song well enough to teach it: share its beat, once
+    if (bs.learned && current && SK.relay && taught !== current.id) {
+      taught = current.id;
+      SK.relay.teachCue({ id: current.id, bpm: bs.learned.bpm, offset: bs.learned.offset });
+      SK.track("song_beat_learned", { video_id: current.id, bpm: bs.learned.bpm });
+    }
     // how tall the dock is (the cards and the player sit above it), and how much of the bottom of the
     // picture is covered in the middle, where he is: he moves up to dance in what's left
     document.documentElement.style.setProperty("--dock-h", dockEl.offsetHeight + "px");

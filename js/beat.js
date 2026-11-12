@@ -121,13 +121,42 @@
       drop: false,            // set when the music comes crashing back in after a quiet stretch; whoever acts on it clears it
       listening: "",          // "", "mic" or "tab"
       locked: false,          // listening, and sure enough of the tempo to follow it
+      synced: false,          // the beat for this song is known (learned from someone who let him listen)
+      learned: null,          // set to { bpm, offset } once he has heard this song well enough to teach it
     };
     const taps = [];
     let whole = 0, ctx = null, analyser = null, stream = null, bins = null, prev = null;
     let tracker = null, lastGuess = 0, level = 0, peak = 0.05, fluxAvg = 0, onsets = 0, busy = 0;
     let lowPeak = 0.05, highPeak = 0.02, slow = 0, lastDrop = 0, held = 0, hush = false, knew = false;
+    // the song's own clock: the video's time, and where in it the beats fall (offset: when beat 0 is)
+    let songId = "", offset = 0, videoT = null, samples = [], followed = false, wasWant = null;
+
+    // The video's clock. While a song plays and he isn't listening, the beat is worked out from where the
+    // video is, so pausing, skipping and buffering can never put him out of step.
+    function follow(t, playing) {
+      videoT = playing ? t : null;
+      s.playing = playing;
+      if (!playing) wasWant = null;
+      if ((s.listening && knew) || !playing || t == null) return;
+      followed = true;
+      const want = ((t - offset) * s.bpm) / 60;
+      // move on as far as the video has, then close any gap gently (the player's time comes in steps)
+      if (wasWant != null && want >= wasWant && want - wasWant < 0.5) s.beat += want - wasWant;
+      wasWant = want;
+      const d = want - s.beat;
+      if (Math.abs(d) > 0.75) { s.beat = want; whole = Math.floor(want); }      // skipped or seeked: jump there
+      else s.beat += d * 0.25;
+    }
+    // what's known about this song's beat (from the relay, which learned it from a listener)
+    function setCue(c) {
+      if (!c || c.id !== songId || !(c.bpm > 40 && c.bpm < 240) || !Number.isFinite(c.offset)) return;
+      offset = c.offset; wasWant = null;
+      if (!s.locked) s.bpm = c.bpm;
+      s.synced = true;
+    }
 
     function setSong(meta) {
+      songId = meta.id || ""; offset = 0; wasWant = null; s.synced = false; s.learned = null; samples = [];
       const g = guess(meta.title || "");
       s.suggested = meta.vibe || g.vibe;
       s.style = meta.style || g.style;
@@ -239,6 +268,23 @@
           err -= Math.round(err);
           s.beat += err * (s.locked ? 0.5 : 1);
           s.locked = knew = true;
+          // Teaching: where beat 0 would fall in the video, by what he's hearing. Once twenty seconds of
+          // these agree with each other, the song's beat is known and can be shared.
+          if (videoT != null && songId && !s.learned) {
+            samples.push([s.bpm, videoT - (s.beat * 60) / s.bpm]);
+            if (samples.length > 16) samples.shift();
+            if (samples.length >= 16) {
+              const bpms = samples.map((x) => x[0]).sort((a, b) => a - b), mid = bpms[8], period = 60 / mid;
+              let c = 0, sn = 0;
+              for (const [, raw] of samples) { const a = (2 * Math.PI * raw) / period; c += Math.cos(a); sn += Math.sin(a); }
+              const agree = Math.hypot(c, sn) / samples.length, steady = bpms[15] / bpms[0] < 1.03;
+              if (agree > 0.85 && steady) {
+                let at = (Math.atan2(sn, c) / (2 * Math.PI)) * period;
+                if (at < 0) at += period;
+                s.learned = { bpm: Math.round(mid * 100) / 100, offset: Math.round(at * 1000) / 1000 };
+              }
+            }
+          }
         }
         // what it sounds like: fast or busy is hype, slow and sparse is chill
         const drive = s.heard * 0.5 + Math.min(1, busy / 4) * 0.5;
@@ -251,7 +297,8 @@
       // Once he has heard the music, his ears decide whether it's playing. Until then (or if he can't
       // hear it at all, through headphones say) it's the player's word.
       const going = s.listening && knew ? s.locked : s.playing;
-      if (going) s.beat += (dt * s.bpm) / 60;
+      if (going && !followed) s.beat += (dt * s.bpm) / 60;      // (when the video's clock set it, it's already right)
+      followed = false;
       const n = Math.floor(s.beat);
       s.kick *= Math.exp(-dt * 7);
       s.hit *= Math.exp(-dt * 9);
@@ -269,7 +316,7 @@
       s.going = going;
     }
 
-    return { state: s, update, tap, listen, stop, setSong };
+    return { state: s, update, tap, listen, stop, setSong, follow, setCue };
   }
 
   const api = { Tracker, guess, createBeat };

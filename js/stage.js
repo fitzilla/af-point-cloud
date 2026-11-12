@@ -721,6 +721,12 @@
   const mp = { ws: null, tries: 0, sentAt: 0, sx: 9, sy: 9, left: true };
   const num = (v, lim) => (typeof v === "number" && Number.isFinite(v) ? Math.max(-lim, Math.min(lim, v)) : 0);
   function send(m) { if (mp.ws && mp.ws.readyState === 1) mp.ws.send(JSON.stringify(m)); }
+  // songs' beats, learned from listeners and kept by the relay
+  let cueWanted = "";
+  SK.relay = {
+    askCue(id) { cueWanted = id; send({ t: "cue?", id }); },
+    teachCue(c) { send({ t: "cue!", id: c.id, bpm: c.bpm, offset: c.offset }); },
+  };
   function connect() {
     if (!MP_URL || mp.ws) return;
     let ws;
@@ -733,6 +739,8 @@
       else if (m.t === "l" || m.t === "x") peerGone(m.id, m.t === "x");
       // the visitor counter: the relay says how many there have been; this browser adds itself once a day
       if ((m.t === "hi" || m.t === "n") && typeof m.n === "number" && SK.ui && SK.ui.visitors) SK.ui.visitors(m.n);
+      if (m.t === "cue") beat.setCue(m);
+      if (m.t === "hi" && cueWanted) send({ t: "cue?", id: cueWanted });
       if (m.t === "hi") {
         try {
           if (Date.now() - (+localStorage.getItem("af-bones-visit") || 0) > 12 * 3600e3) { localStorage.setItem("af-bones-visit", String(Date.now())); send({ t: "v" }); }
@@ -801,6 +809,9 @@
     st.energy = Math.max(0, st.energy - dt * (0.35 + st.energy * 0.5));
 
     // the beat, then the pose it asks for, then where that puts every bone
+    // the song's own clock, when a video is playing (see beat.follow); otherwise the player's word stands
+    const vc = SK.videoClock && SK.videoClock();
+    if (vc) beat.follow(vc.t, vc.playing);
     beat.update(dt, now);
     const bs = beat.state;
     danceCtx.beat = bs.beat; danceCtx.bpm = bs.bpm; danceCtx.vibe = bs.vibe; danceCtx.energy = bs.energy; danceCtx.going = !!bs.going; danceCtx.t = t; danceCtx.style = bs.style; danceCtx.signature = bs.signature;
